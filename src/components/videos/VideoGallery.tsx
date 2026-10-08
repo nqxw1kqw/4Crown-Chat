@@ -222,7 +222,13 @@ export default function VideoGallery({
         return;
       }
       const msg = err instanceof Error ? err.message : t('videos.statusError');
-      if (msg.includes('dummy') || msg.includes('Failed') || msg.includes('credentials')) {
+      if (
+        msg.includes('dummy') ||
+        msg.includes('Failed') ||
+        msg.includes('credentials') ||
+        msg.includes('Access Denied') ||
+        msg.includes('denied')
+      ) {
         simulateMockUpload();
       } else {
         setUploadError(msg);

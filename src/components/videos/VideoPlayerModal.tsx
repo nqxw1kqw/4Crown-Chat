@@ -47,7 +47,7 @@ export default function VideoPlayerModal({
       setLoadingUrl(true);
       setErrorMsg(null);
 
-      const res = await fetch(`/api/videos/${video.id}/url`);
+      const res = await fetch(`/api/videos/${video.id}/url?key=${encodeURIComponent(video.file_key)}`);
       if (res.ok) {
         const data = await res.json();
         setVideoUrl(data.videoUrl);
@@ -69,7 +69,7 @@ export default function VideoPlayerModal({
     let isMounted = true;
     async function load() {
       try {
-        const res = await fetch(`/api/videos/${video.id}/url`);
+        const res = await fetch(`/api/videos/${video.id}/url?key=${encodeURIComponent(video.file_key)}`);
         if (!isMounted) return;
         if (res.ok) {
           const data = await res.json();

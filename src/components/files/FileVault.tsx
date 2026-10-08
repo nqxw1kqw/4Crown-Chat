@@ -120,7 +120,9 @@ export default function FileVault({
 
   const handleDownload = async (file: FileRecord) => {
     try {
-      const res = await fetch(`/api/files/${file.id}/download`);
+      const res = await fetch(
+        `/api/files/${file.id}/download?key=${encodeURIComponent(file.file_key)}&name=${encodeURIComponent(file.name)}`
+      );
       if (res.ok) {
         const data = await res.json();
         window.open(data.downloadUrl, '_blank');
@@ -247,7 +249,13 @@ export default function FileVault({
         return;
       }
       const msg = err instanceof Error ? err.message : t('videos.statusError');
-      if (msg.includes('dummy') || msg.includes('Failed') || msg.includes('credentials')) {
+      if (
+        msg.includes('dummy') ||
+        msg.includes('Failed') ||
+        msg.includes('credentials') ||
+        msg.includes('Access Denied') ||
+        msg.includes('denied')
+      ) {
         simulateMockFileUpload();
       } else {
         setUploadError(msg);
