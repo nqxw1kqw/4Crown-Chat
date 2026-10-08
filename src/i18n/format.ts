@@ -18,9 +18,24 @@ export function formatDate(
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return dict['common.unset'];
 
-  const now = referenceTime ? new Date(referenceTime) : new Date('2026-10-08T12:00:00Z');
-  const diffTime = date.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const now = referenceTime
+    ? new Date(referenceTime)
+    : typeof window !== 'undefined'
+    ? new Date()
+    : new Date('2026-10-09T00:00:00Z');
+
+  // Kiểm tra cùng ngày dương lịch
+  const isSameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isSameDay) return dict['common.today'];
+
+  // So sánh khoảng cách số ngày theo đầu ngày (start of day)
+  const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round((startOfDate - startOfNow) / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) return dict['common.today'];
   if (diffDays === 1) return dict['common.tomorrow'];

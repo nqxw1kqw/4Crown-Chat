@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { verifyProjectAccess } from '@/lib/auth-helpers';
-import { getPresignedVideoGetUrl } from '@/lib/r2/client';
+import { getPresignedVideoGetUrl, getR2Client, getR2BucketName } from '@/lib/r2/client';
+import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 
 export async function GET(
   req: NextRequest,
@@ -52,8 +53,34 @@ export async function GET(
     // Kiểm tra quyền (VIEWER trở lên)
     await verifyProjectAccess(projectId, ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
 
+    // Phân giải key thật trong Cloudflare R2 (hỗ trợ trường hợp key bị thiếu UUID từ client)
+    let actualKey = fileKey;
+    try {
+      const s3 = getR2Client();
+      const bucket = getR2BucketName();
+      const filename = fileKey.split('/').pop() || fileKey;
+
+      const listRes = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: `projects/${projectId}/video/`,
+        })
+      );
+
+      if (listRes.Contents && listRes.Contents.length > 0) {
+        const match = listRes.Contents.slice()
+          .reverse()
+          .find((item) => item.Key && (item.Key === fileKey || item.Key.endsWith(`/${filename}`)));
+        if (match?.Key) {
+          actualKey = match.Key;
+        }
+      }
+    } catch (r2Err) {
+      console.warn('Lỗi phân giải key R2:', r2Err);
+    }
+
     // Cấp presigned GET URL (1 giờ)
-    const videoUrl = await getPresignedVideoGetUrl(fileKey, 3600);
+    const videoUrl = await getPresignedVideoGetUrl(actualKey, 3600);
 
     return NextResponse.json({
       id,

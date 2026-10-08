@@ -211,7 +211,7 @@ export default function FileVault({
     const kind: UploadKind = selectedFolder === 'builds' ? 'build' : 'file';
 
     try {
-      await uploadLargeFileToR2({
+      const uploadRes = await uploadLargeFileToR2({
         projectId,
         file: selectedFile,
         kind,
@@ -223,12 +223,17 @@ export default function FileVault({
         onProgress: (p) => setUploadProgress(p),
       });
 
+      const actualKey =
+        uploadRes?.record?.file_key ||
+        uploadRes?.key ||
+        `projects/${projectId}/${selectedFolder}/${selectedFile.name}`;
+
       const newFileObj: FileRecord = {
-        id: `file-${crypto.randomUUID()}`,
+        id: uploadRes?.record?.id || `file-${crypto.randomUUID()}`,
         project_id: projectId,
         folder: selectedFolder,
         name: selectedFile.name,
-        file_key: `projects/${projectId}/${selectedFolder}/${selectedFile.name}`,
+        file_key: actualKey,
         size: selectedFile.size,
         mime: selectedFile.type,
         uploaded_by: currentUserId,

@@ -181,7 +181,7 @@ export default function VideoGallery({
     abortControllerRef.current = new AbortController();
 
     try {
-      await uploadLargeFileToR2({
+      const uploadRes = await uploadLargeFileToR2({
         projectId,
         file: selectedFile,
         kind: 'video',
@@ -195,13 +195,18 @@ export default function VideoGallery({
         onProgress: (p) => setUploadProgress(p),
       });
 
+      const actualKey =
+        uploadRes?.record?.file_key ||
+        uploadRes?.key ||
+        `projects/${projectId}/video/${selectedFile.name}`;
+
       const newVideoObj: GameplayVideo = {
-        id: `vid-${crypto.randomUUID()}`,
+        id: uploadRes?.record?.id || `vid-${crypto.randomUUID()}`,
         project_id: projectId,
         version: videoVersion.trim(),
         title: videoTitle.trim(),
         description: videoDescription.trim(),
-        file_key: `projects/${projectId}/video/${selectedFile.name}`,
+        file_key: actualKey,
         thumbnail_key: previewThumbnail,
         duration: extractedDuration,
         size: selectedFile.size,

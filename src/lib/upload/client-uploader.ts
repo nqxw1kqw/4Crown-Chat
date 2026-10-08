@@ -500,5 +500,8 @@ export async function uploadLargeFileToR2({
   const result = await completeRes.json();
   updateProgress({ status: 'done', percentage: 100 });
 
-  return result;
+  return {
+    ...result,
+    key: objectKey,
+  };
 }
