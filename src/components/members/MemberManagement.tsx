@@ -3,16 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users,
-  Shield,
-  ShieldAlert,
   UserPlus,
   Trash2,
-  Crown,
   X,
 } from 'lucide-react';
 import { ProjectMember, Profile, ProjectRole } from '@/types/database';
 import { canManageMembers, getRoleRestrictionMessage } from '@/lib/permissions';
 import { useToast } from '@/components/ui/Toast';
+import { useLocale } from '@/i18n/useLocale';
+import { TranslationKey } from '@/i18n/dictionaries/vi';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { RoleBadge } from '@/components/ui/Badge';
+import { Tooltip } from '@/components/ui/Tooltip';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface MemberManagementProps {
@@ -24,35 +27,7 @@ interface MemberManagementProps {
   onAddMember: (displayName: string, role: ProjectRole) => void;
 }
 
-const ROLE_DEFINITIONS: Record<
-  ProjectRole,
-  { label: string; desc: string; badgeColor: string; icon: typeof Crown }
-> = {
-  OWNER: {
-    label: 'OWNER (Chủ dự án)',
-    desc: 'Toàn quyền dự án, đổi cấu hình, xóa dự án, quản lý mọi task và file.',
-    badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    icon: Crown,
-  },
-  ADMIN: {
-    label: 'ADMIN (Quản trị)',
-    desc: 'Quản lý thành viên, sửa mọi task, xóa file/video, duyệt tiến độ.',
-    badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
-    icon: Shield,
-  },
-  MEMBER: {
-    label: 'MEMBER (Thành viên)',
-    desc: 'Tạo task, sửa task được gán, tải lên video gameplay và file build.',
-    badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    icon: Users,
-  },
-  VIEWER: {
-    label: 'VIEWER (Chỉ xem)',
-    desc: 'Chỉ được xem dashboard, task, xem video và tải file. Không tạo/sửa.',
-    badgeColor: 'bg-zinc-500/10 text-zinc-400 border-zinc-700/50',
-    icon: ShieldAlert,
-  },
-};
+const ALL_ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
 export default function MemberManagement({
   members,
@@ -62,6 +37,7 @@ export default function MemberManagement({
   onRemoveMember,
   onAddMember,
 }: MemberManagementProps) {
+  const { t } = useLocale();
   const { success, error: toastError } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
@@ -86,12 +62,18 @@ export default function MemberManagement({
     if (!newMemberName.trim()) return;
 
     if (!canManage) {
-      toastError('Không có quyền', getRoleRestrictionMessage('thêm thành viên', userRole));
+      toastError(t('tasks.noPermission'), getRoleRestrictionMessage(t('action.addMember'), userRole, t));
       return;
     }
 
     onAddMember(newMemberName.trim(), newMemberRole);
-    success('Thêm thành viên thành công', `Đã mời "${newMemberName.trim()}" với vai trò ${newMemberRole}`);
+    success(
+      t('members.addSuccessTitle'),
+      t('members.addSuccessMsg', {
+        name: newMemberName.trim(),
+        role: t(`role.${newMemberRole}` as TranslationKey),
+      })
+    );
     setNewMemberName('');
     setNewMemberRole('MEMBER');
     setShowAddModal(false);
@@ -99,11 +81,17 @@ export default function MemberManagement({
 
   const handleRoleChange = (member: ProjectMember & { profile: Profile }, newRole: ProjectRole) => {
     if (!canManage) {
-      toastError('Không có quyền', getRoleRestrictionMessage('thay đổi vai trò', userRole));
+      toastError(t('tasks.noPermission'), getRoleRestrictionMessage(t('action.changeRole'), userRole, t));
       return;
     }
     onUpdateRole(member.user_id, newRole);
-    success('Đã cập nhật vai trò', `${member.profile.display_name} hiện là ${newRole}`);
+    success(
+      t('members.roleUpdatedTitle'),
+      t('members.roleUpdatedMsg', {
+        name: member.profile.display_name,
+        role: t(`role.${newRole}` as TranslationKey),
+      })
+    );
   };
 
   return (
@@ -111,68 +99,69 @@ export default function MemberManagement({
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <Users className="h-5 w-5 text-indigo-400" /> Quản lý Thành viên & Phân quyền (RBAC)
+          <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
+            <Users className="h-5 w-5 text-indigo-400" /> {t('members.title')}
           </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Phân quyền 4 cấp độ nghiêm ngặt: OWNER, ADMIN, MEMBER, VIEWER
+          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+            {t('members.subtitle')}
           </p>
         </div>
 
         {canManage ? (
-          <button
-            type="button"
+          <Button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
+            icon={UserPlus}
           >
-            <UserPlus className="h-4 w-4" /> Thêm Thành viên
-          </button>
+            {t('members.addBtn')}
+          </Button>
         ) : (
-          <div
-            title={getRoleRestrictionMessage('quản lý thành viên', userRole)}
-            className="text-xs text-zinc-400 italic py-2 px-3 border border-zinc-800 rounded-xl bg-[#12141d]"
-          >
-            Chỉ OWNER và ADMIN mới có quyền quản lý thành viên
-          </div>
+          <Tooltip content={t('members.noManagePerm')}>
+            <Button
+              disabled
+              icon={UserPlus}
+            >
+              {t('members.addBtn')}
+            </Button>
+          </Tooltip>
         )}
       </div>
 
       {/* Permissions Matrix Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {(Object.keys(ROLE_DEFINITIONS) as ProjectRole[]).map((r) => {
-          const info = ROLE_DEFINITIONS[r];
+        {ALL_ROLES.map((r) => {
           return (
-            <div
+            <Card
               key={r}
-              className="rounded-xl border border-zinc-800/80 bg-[#12141e] p-3.5 space-y-1.5"
+              padding="sm"
+              className="space-y-1.5"
             >
               <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${info.badgeColor}`}>
-                  {r}
-                </span>
+                <RoleBadge role={r} />
               </div>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">{info.desc}</p>
-            </div>
+              <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                {t(`roleDesc.${r}` as TranslationKey)}
+              </p>
+            </Card>
           );
         })}
       </div>
 
       {/* Members List Table */}
-      <div className="rounded-2xl border border-[#1f2330] bg-[#12141d] overflow-hidden shadow-sm">
-        <div className="divide-y divide-zinc-800/50">
+      <Card padding="none" className="overflow-hidden shadow-sm">
+        <div className="divide-y divide-[var(--color-border)]">
           {members.map((m) => {
-            const roleInfo = ROLE_DEFINITIONS[m.role];
             const isMe = m.user_id === currentUserId;
             const isOwner = m.role === 'OWNER';
 
             return (
               <div
                 key={m.id}
-                className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#161924] transition-colors"
+                className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-white text-sm overflow-hidden border border-zinc-700">
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-white text-sm overflow-hidden border border-[var(--color-border-strong)]">
                     {m.profile.avatar_url ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={m.profile.avatar_url} alt={m.profile.display_name} className="h-full w-full object-cover" />
                     ) : (
                       m.profile.display_name.charAt(0)
@@ -181,14 +170,14 @@ export default function MemberManagement({
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-semibold text-zinc-100">{m.profile.display_name}</h4>
+                      <h4 className="text-sm font-semibold text-[var(--color-text)]">{m.profile.display_name}</h4>
                       {isMe && (
-                        <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.2 rounded font-medium">
-                          Bạn
+                        <span className="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded font-medium border border-indigo-500/20">
+                          {t('members.youBadge')}
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-zinc-400">ID: {m.user_id}</span>
+                    <span className="text-xs text-[var(--color-text-muted)]">ID: {m.user_id}</span>
                   </div>
                 </div>
 
@@ -197,28 +186,26 @@ export default function MemberManagement({
                     <select
                       value={m.role}
                       onChange={(e) => handleRoleChange(m, e.target.value as ProjectRole)}
-                      aria-label={`Thay đổi vai trò cho ${m.profile.display_name}`}
-                      className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      aria-label={t('members.changeRoleAria', { name: m.profile.display_name })}
+                      className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                     >
                       {(['ADMIN', 'MEMBER', 'VIEWER'] as ProjectRole[]).map((r) => (
                         <option key={r} value={r}>
-                          {r}
+                          {t(`role.${r}` as TranslationKey)}
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <span className={`text-xs px-2.5 py-1 rounded-full border ${roleInfo.badgeColor} font-semibold`}>
-                      {m.role}
-                    </span>
+                    <RoleBadge role={m.role} />
                   )}
 
                   {canManage && !isOwner && !isMe && (
                     <button
                       type="button"
                       onClick={() => setMemberToRemove(m)}
-                      className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 transition-colors"
-                      aria-label={`Xóa thành viên ${m.profile.display_name} khỏi dự án`}
-                      title="Xóa khỏi dự án"
+                      className="p-2 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-danger)] hover:bg-rose-950/20 transition-colors cursor-pointer"
+                      aria-label={t('members.removeMemberAria', { name: m.profile.display_name })}
+                      title={t('common.delete')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -228,7 +215,7 @@ export default function MemberManagement({
             );
           })}
         </div>
-      </div>
+      </Card>
 
       {/* Add Member Modal */}
       {showAddModal && (
@@ -238,16 +225,16 @@ export default function MemberManagement({
           aria-modal="true"
           aria-labelledby="add-member-modal-title"
         >
-          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-4">
-              <h3 id="add-member-modal-title" className="text-base font-bold text-white">
-                Thêm Thành viên mới
+          <div className="relative w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
+              <h3 id="add-member-modal-title" className="text-base font-bold text-[var(--color-text)]">
+                {t('members.modalAddTitle')}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                aria-label="Đóng cửa sổ thêm thành viên"
-                className="text-zinc-400 hover:text-white"
+                aria-label={t('members.closeModalAria')}
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-1 cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -255,44 +242,48 @@ export default function MemberManagement({
 
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Tên hiển thị *</label>
+                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  {t('members.formName')}
+                </label>
                 <input
                   type="text"
                   required
                   value={newMemberName}
                   onChange={(e) => setNewMemberName(e.target.value)}
-                  placeholder="Ví dụ: Alex (Sound Designer)"
-                  className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  placeholder={t('members.formNamePlaceholder')}
+                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3.5 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Phân quyền</label>
+                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  {t('members.formRole')}
+                </label>
                 <select
                   value={newMemberRole}
                   onChange={(e) => setNewMemberRole(e.target.value as ProjectRole)}
-                  className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                 >
-                  <option value="MEMBER">MEMBER (Thành viên - Được tạo task, upload)</option>
-                  <option value="ADMIN">ADMIN (Quản trị viên)</option>
-                  <option value="VIEWER">VIEWER (Chỉ xem - Không được tạo/sửa/tải lên)</option>
+                  <option value="MEMBER">{t('members.formRoleMember')}</option>
+                  <option value="ADMIN">{t('members.formRoleAdmin')}</option>
+                  <option value="VIEWER">{t('members.formRoleViewer')}</option>
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-800/80">
-                <button
+              <div className="flex justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setShowAddModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 >
-                  Hủy
-                </button>
-                <button
+                  {t('common.cancel')}
+                </Button>
+                <Button
                   type="submit"
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
+                  variant="primary"
                 >
-                  Thêm vào Team
-                </button>
+                  {t('members.formSubmit')}
+                </Button>
               </div>
             </form>
           </div>
@@ -303,15 +294,18 @@ export default function MemberManagement({
       {memberToRemove && (
         <ConfirmDialog
           isOpen={!!memberToRemove}
-          title="Xác nhận xóa thành viên"
-          description="Thành viên này sẽ bị tước toàn bộ quyền truy cập vào dự án."
-          targetName={`"${memberToRemove.profile.display_name}" (${memberToRemove.role})`}
-          confirmLabel="Xóa khỏi dự án"
-          cancelLabel="Hủy bỏ"
+          title={t('members.deleteConfirmTitle')}
+          description={t('members.deleteConfirmDesc')}
+          targetName={`"${memberToRemove.profile.display_name}" (${t(`role.${memberToRemove.role}` as TranslationKey)})`}
+          confirmLabel={t('members.deleteConfirmBtn')}
+          cancelLabel={t('common.cancel')}
           isDangerous={true}
           onConfirm={() => {
             onRemoveMember(memberToRemove.user_id);
-            success('Đã xóa thành viên', `Đã xóa ${memberToRemove.profile.display_name} khỏi dự án.`);
+            success(
+              t('members.removeSuccessTitle'),
+              t('members.removeSuccessMsg', { name: memberToRemove.profile.display_name })
+            );
             setMemberToRemove(null);
           }}
           onCancel={() => setMemberToRemove(null)}

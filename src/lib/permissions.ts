@@ -1,4 +1,6 @@
+// Chỉ dùng cho UI. Quyền thật được enforce ở RLS và server.
 import { ProjectRole, Task } from '@/types/database';
+import { TranslationKey } from '@/i18n/dictionaries/vi';
 
 /**
  * Các hàm kiểm tra phân quyền người dùng phía client (RBAC)
@@ -37,7 +39,17 @@ export function canDeleteProject(role: ProjectRole): boolean {
   return role === 'OWNER';
 }
 
-export function getRoleRestrictionMessage(actionName: string, role: ProjectRole): string {
+export function getRoleRestrictionMessage(
+  actionName: string,
+  role: ProjectRole,
+  t?: (key: TranslationKey, params?: Record<string, string | number>) => string
+): string {
+  if (t) {
+    if (role === 'VIEWER') {
+      return t('permissions.viewerRestriction', { action: actionName });
+    }
+    return t('permissions.unauthorized', { action: actionName });
+  }
   if (role === 'VIEWER') {
     return `Vai trò VIEWER chỉ có quyền xem, không thể ${actionName}.`;
   }

@@ -13,10 +13,15 @@ import {
   GripVertical,
 } from 'lucide-react';
 import { Task, ProjectRole, Profile, TaskStatus, TaskPriority } from '@/types/database';
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG } from '@/lib/constants';
-import { formatDate, isOverdue } from '@/lib/utils';
+import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, DEFAULT_PROJECT_ID } from '@/lib/constants';
 import { useToast } from '@/components/ui/Toast';
 import { canCreateTask, canEditTask, getRoleRestrictionMessage } from '@/lib/permissions';
+import { useLocale } from '@/i18n/useLocale';
+import { TranslationKey } from '@/i18n/dictionaries/vi';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { PriorityBadge } from '@/components/ui/Badge';
+import { Tooltip } from '@/components/ui/Tooltip';
 import TaskDetailModal from './TaskDetailModal';
 
 interface TaskListProps {
@@ -31,12 +36,12 @@ interface TaskListProps {
   onClearSelectedTaskId?: () => void;
 }
 
-const STATUS_GROUPS: { status: TaskStatus; title: string; countColor: string }[] = [
-  { status: 'TODO', title: 'Cần làm (TODO)', countColor: 'text-zinc-400 bg-zinc-800' },
-  { status: 'IN_PROGRESS', title: 'Đang làm (IN_PROGRESS)', countColor: 'text-blue-400 bg-blue-500/10' },
-  { status: 'REVIEW', title: 'Chờ duyệt (REVIEW)', countColor: 'text-amber-400 bg-amber-500/10' },
-  { status: 'DONE', title: 'Hoàn tất (DONE)', countColor: 'text-emerald-400 bg-emerald-500/10' },
-  { status: 'BLOCKED', title: 'Bị nghẽn (BLOCKED)', countColor: 'text-rose-400 bg-rose-500/10' },
+const STATUS_GROUPS: { status: TaskStatus; countColor: string }[] = [
+  { status: 'TODO', countColor: 'text-[var(--color-text-muted)] bg-[var(--color-surface-raised)]' },
+  { status: 'IN_PROGRESS', countColor: 'text-[var(--color-info)] bg-blue-500/10' },
+  { status: 'REVIEW', countColor: 'text-[var(--color-warning)] bg-amber-500/10' },
+  { status: 'DONE', countColor: 'text-[var(--color-success)] bg-emerald-500/10' },
+  { status: 'BLOCKED', countColor: 'text-[var(--color-danger)] bg-rose-500/10' },
 ];
 
 export default function TaskList({
@@ -50,6 +55,7 @@ export default function TaskList({
   selectedTaskId,
   onClearSelectedTaskId,
 }: TaskListProps) {
+  const { t, formatDate, isOverdue } = useLocale();
   const { success, error } = useToast();
   const [filterAssignee, setFilterAssignee] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,18 +125,19 @@ export default function TaskList({
   });
 
   // Optimistic update khi thay đổi trạng thái
-  const handleQuickStatusChange = (task: Task, newStatus: TaskStatus) => {
-    if (task.status === newStatus) return;
+  const handleQuickStatusChange = (task: Task, nextStatus: TaskStatus) => {
+    if (task.status === nextStatus) return;
     const oldStatus = task.status;
+    const statusLabel = t(`status.${nextStatus}` as TranslationKey);
     try {
-      onUpdateTask(task.id, { status: newStatus });
+      onUpdateTask(task.id, { status: nextStatus });
       success(
-        'Đã cập nhật trạng thái',
-        `"${task.title}" chuyển sang ${TASK_STATUS_CONFIG[newStatus].label}`
+        t('tasks.statusUpdatedTitle'),
+        t('tasks.statusUpdatedMsg', { title: task.title, status: statusLabel })
       );
     } catch {
       onUpdateTask(task.id, { status: oldStatus });
-      error('Cập nhật thất bại', 'Đã khôi phục lại trạng thái trước đó.');
+      error(t('tasks.statusUpdateFailed'), t('tasks.statusRollbackMsg'));
     }
   };
 
@@ -150,7 +157,7 @@ export default function TaskList({
     if (!targetTask) return;
 
     if (!canEditTask(userRole, targetTask, currentUserId)) {
-      error('Không đủ quyền', getRoleRestrictionMessage('chuyển trạng thái task này', userRole));
+      error(t('tasks.noPermission'), getRoleRestrictionMessage(t('action.changeStatus'), userRole, t));
       return;
     }
 
@@ -162,7 +169,7 @@ export default function TaskList({
     if (!newTitle.trim()) return;
 
     onCreateTask({
-      project_id: tasks[0]?.project_id || 'proj-1',
+      project_id: tasks[0]?.project_id || DEFAULT_PROJECT_ID,
       title: newTitle.trim(),
       description: newDescription.trim(),
       status: newStatus,
@@ -174,7 +181,7 @@ export default function TaskList({
       checklist: [],
     });
 
-    success('Tạo task thành công', `Đã thêm task "${newTitle.trim()}"`);
+    success(t('tasks.taskCreatedTitle'), t('tasks.taskCreatedMsg', { title: newTitle.trim() }));
 
     setNewTitle('');
     setNewDescription('');
@@ -192,14 +199,14 @@ export default function TaskList({
         <div className="flex flex-1 flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--color-text-muted)]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm kiếm task..."
-              aria-label="Tìm kiếm task"
-              className="w-full rounded-xl border border-zinc-800 bg-[#12141e] pl-9 pr-4 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+              placeholder={t('tasks.searchPlaceholder')}
+              aria-label={t('tasks.searchAria')}
+              className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] pl-9 pr-4 py-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
             />
           </div>
 
@@ -208,10 +215,10 @@ export default function TaskList({
             <select
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
-              aria-label="Lọc theo người phụ trách"
-              className="rounded-xl border border-zinc-800 bg-[#12141e] px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+              aria-label={t('tasks.filterAssigneeAria')}
+              className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
             >
-              <option value="ALL">Tất cả người phụ trách</option>
+              <option value="ALL">{t('tasks.allAssignees')}</option>
               {members.map((m) => (
                 <option key={m.user_id} value={m.user_id}>
                   {m.profile.display_name}
@@ -221,32 +228,32 @@ export default function TaskList({
           </div>
 
           {/* Toggle Chế độ hiển thị Danh sách / Kanban */}
-          <div className="flex items-center bg-[#12141e] border border-zinc-800 rounded-xl p-1 gap-1">
+          <div className="flex items-center bg-[var(--color-surface)] border border-[var(--color-border-strong)] rounded-xl p-1 gap-1">
             <button
               type="button"
               onClick={() => handleToggleViewMode('list')}
-              aria-label="Chế độ hiển thị danh sách"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              aria-label={t('tasks.viewList')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
               <LayoutList className="h-3.5 w-3.5" />
-              <span>Danh sách</span>
+              <span>{t('tasks.viewList')}</span>
             </button>
             <button
               type="button"
               onClick={() => handleToggleViewMode('kanban')}
-              aria-label="Chế độ hiển thị bảng Kanban"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              aria-label={t('tasks.viewKanban')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
                 viewMode === 'kanban'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-white'
+                  ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
               <Kanban className="h-3.5 w-3.5" />
-              <span>Kanban</span>
+              <span>{t('tasks.viewKanban')}</span>
             </button>
           </div>
         </div>
@@ -254,42 +261,44 @@ export default function TaskList({
         {/* Create Task Button */}
         <div className="shrink-0">
           {canCreate ? (
-            <button
-              type="button"
+            <Button
               onClick={() => setShowCreateModal(true)}
-              className="w-full md:w-auto flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
+              icon={Plus}
             >
-              <Plus className="h-4 w-4" /> Tạo Task Mới
-            </button>
+              {t('tasks.createTask')}
+            </Button>
           ) : (
-            <div
-              title={getRoleRestrictionMessage('tạo task', userRole)}
-              className="text-xs text-zinc-400 italic py-2 px-3 border border-zinc-800 rounded-xl bg-[#12141d] text-center"
-            >
-              Vai trò VIEWER không có quyền tạo task
-            </div>
+            <Tooltip content={t('tasks.viewerNoCreate')}>
+              <Button
+                disabled
+                icon={Plus}
+              >
+                {t('tasks.createTask')}
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>
 
       {/* Empty State Banner khi chưa có task nào */}
       {tasks.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-zinc-800 bg-[#12141d]/60 p-8 text-center">
+        <Card className="border-dashed p-8 text-center bg-[var(--color-surface)]/50">
           <ListTodo className="h-10 w-10 mx-auto text-indigo-400 mb-2 opacity-80" />
-          <h3 className="text-sm font-semibold text-zinc-200">Dự án hiện chưa có task nào</h3>
-          <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
-            Bắt đầu lên danh sách công việc cho team phát triển game bằng cách tạo task đầu tiên nhé.
+          <h3 className="text-sm font-semibold text-[var(--color-text)]">{t('tasks.emptyTitle')}</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto leading-relaxed">
+            {t('tasks.emptyDescription')}
           </p>
           {canCreate && (
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
-            >
-              <Plus className="h-4 w-4" /> Bắt đầu tạo task
-            </button>
+            <div className="mt-4">
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                icon={Plus}
+              >
+                {t('tasks.createTaskButton')}
+              </Button>
+            </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Chế độ Kanban */}
@@ -297,20 +306,22 @@ export default function TaskList({
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">
           {STATUS_GROUPS.map((group) => {
             const groupTasks = filteredTasks.filter((t) => t.status === group.status);
+            const statusTitle = t(`status.${group.status}` as TranslationKey);
+
             return (
               <div
                 key={group.status}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, group.status)}
-                className="flex flex-col min-w-[250px] rounded-2xl border border-[#1f2330] bg-[#12141d] overflow-hidden"
+                className="flex flex-col min-w-[250px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden shadow-sm"
               >
                 {/* Column Header */}
-                <div className="p-3.5 border-b border-zinc-800/80 bg-[#141722] flex items-center justify-between">
+                <div className="p-3.5 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
-                      {group.status}
+                    <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">
+                      {statusTitle}
                     </span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${group.countColor}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-[var(--color-border)] ${group.countColor}`}>
                       {groupTasks.length}
                     </span>
                   </div>
@@ -319,8 +330,8 @@ export default function TaskList({
                 {/* Cards Container */}
                 <div className="p-3 flex-1 space-y-3 min-h-[300px]">
                   {groupTasks.length === 0 ? (
-                    <div className="h-32 border border-dashed border-zinc-800/60 rounded-xl flex items-center justify-center text-xs text-zinc-500 text-center p-3">
-                      Kéo thả task vào đây
+                    <div className="h-32 border border-dashed border-[var(--color-border)] rounded-xl flex items-center justify-center text-xs text-[var(--color-text-muted)] text-center p-3">
+                      {t('tasks.kanbanDropPlaceholder')}
                     </div>
                   ) : (
                     groupTasks.map((task) => {
@@ -333,33 +344,31 @@ export default function TaskList({
                           draggable={editable}
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onClick={() => setActiveModalTask(task)}
-                          className={`p-3.5 rounded-xl border border-zinc-800 bg-[#161924] hover:border-zinc-700 hover:bg-[#1a1d2b] cursor-pointer transition-all shadow-sm ${
+                          className={`p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)] cursor-pointer transition-all duration-150 shadow-sm ${
                             editable ? 'cursor-grab active:cursor-grabbing' : ''
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <span className={`text-[10px] font-bold ${TASK_PRIORITY_CONFIG[task.priority].color}`}>
-                              ● {TASK_PRIORITY_CONFIG[task.priority].label}
-                            </span>
+                            <PriorityBadge priority={task.priority} />
                             {editable && (
-                              <GripVertical className="h-3.5 w-3.5 text-zinc-600 shrink-0" />
+                              <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] shrink-0" />
                             )}
                           </div>
 
-                          <h4 className="text-xs font-semibold text-zinc-200 mt-1.5 line-clamp-2">
+                          <h4 className="text-xs font-semibold text-[var(--color-text)] mt-1.5 line-clamp-2">
                             {task.title}
                           </h4>
 
-                          <div className="mt-3 pt-2.5 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-400">
+                          <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
                             <span className="truncate max-w-[100px]">
-                              {assignee ? assignee.display_name : 'Chưa gán'}
+                              {assignee ? assignee.display_name : t('tasks.unassigned')}
                             </span>
                             {task.deadline && (
                               <span
                                 className={
-                                  task.status !== 'DONE' && isOverdue(task.deadline)
-                                    ? 'text-rose-400 font-semibold'
-                                    : 'text-zinc-400'
+                                  task.status !== 'DONE' && isOverdue(task.deadline, task.status)
+                                    ? 'text-[var(--color-danger)] font-semibold'
+                                    : 'text-[var(--color-text-muted)]'
                                 }
                               >
                                 {formatDate(task.deadline)}
@@ -382,28 +391,31 @@ export default function TaskList({
         <div className="space-y-6">
           {STATUS_GROUPS.map((group) => {
             const groupTasks = filteredTasks.filter((t) => t.status === group.status);
+            const statusTitle = t(`status.${group.status}` as TranslationKey);
+
             return (
-              <div
+              <Card
                 key={group.status}
-                className="rounded-2xl border border-[#1f2330] bg-[#12141d] overflow-hidden shadow-sm"
+                padding="none"
+                className="overflow-hidden"
               >
                 {/* Group Header */}
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/80 bg-[#141722]">
+                <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]">
                   <div className="flex items-center gap-2.5">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
-                      {group.title}
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">
+                      {statusTitle}
                     </h3>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${group.countColor}`}>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-[var(--color-border)] ${group.countColor}`}>
                       {groupTasks.length}
                     </span>
                   </div>
                 </div>
 
                 {/* Group Items */}
-                <div className="divide-y divide-zinc-800/50">
+                <div className="divide-y divide-[var(--color-border)]">
                   {groupTasks.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-zinc-400">
-                      Chưa có công việc trong mục này.
+                    <div className="p-4 text-center text-xs text-[var(--color-text-muted)]">
+                      {t('tasks.columnEmpty')}
                     </div>
                   ) : (
                     groupTasks.map((task) => {
@@ -413,7 +425,7 @@ export default function TaskList({
                       return (
                         <div
                           key={task.id}
-                          className="p-4 hover:bg-[#161924] transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                          className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                         >
                           {/* Task Title & Details */}
                           <div
@@ -421,29 +433,27 @@ export default function TaskList({
                             className="flex-1 cursor-pointer min-w-0 pr-3"
                           >
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-[11px] font-bold ${TASK_PRIORITY_CONFIG[task.priority].color}`}>
-                                ● {TASK_PRIORITY_CONFIG[task.priority].label}
-                              </span>
-                              <span className="text-zinc-500">•</span>
-                              <h4 className="text-sm font-semibold text-zinc-100 group-hover:text-indigo-300 transition-colors truncate">
+                              <PriorityBadge priority={task.priority} />
+                              <span className="text-[var(--color-text-muted)]">•</span>
+                              <h4 className="text-sm font-semibold text-[var(--color-text)] group-hover:text-indigo-300 transition-colors truncate">
                                 {task.title}
                               </h4>
                             </div>
 
-                            <div className="flex items-center gap-4 mt-2 text-xs text-zinc-400 flex-wrap">
+                            <div className="flex items-center gap-4 mt-2 text-xs text-[var(--color-text-muted)] flex-wrap">
                               {/* Assignee */}
                               <div className="flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5 text-zinc-500" />
-                                <span>{assignee ? assignee.display_name : 'Chưa gán'}</span>
+                                <User className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                                <span>{assignee ? assignee.display_name : t('tasks.unassigned')}</span>
                               </div>
 
                               {/* Deadline */}
                               {task.deadline && (
                                 <div
                                   className={`flex items-center gap-1.5 ${
-                                    task.status !== 'DONE' && isOverdue(task.deadline)
-                                      ? 'text-rose-400 font-semibold'
-                                      : 'text-zinc-400'
+                                    task.status !== 'DONE' && isOverdue(task.deadline, task.status)
+                                      ? 'text-[var(--color-danger)] font-semibold'
+                                      : 'text-[var(--color-text-muted)]'
                                   }`}
                                 >
                                   <Calendar className="h-3.5 w-3.5" />
@@ -453,7 +463,7 @@ export default function TaskList({
 
                               {/* Progress */}
                               <div className="flex items-center gap-2">
-                                <div className="w-16 bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                                <div className="w-16 bg-[var(--color-surface-raised)] border border-[var(--color-border)] rounded-full h-1.5 overflow-hidden">
                                   <div
                                     className="bg-indigo-500 h-1.5 rounded-full"
                                     style={{ width: `${task.progress}%` }}
@@ -464,8 +474,11 @@ export default function TaskList({
 
                               {/* Checklist count */}
                               {task.checklist && task.checklist.length > 0 && (
-                                <span className="text-[11px] text-zinc-400 font-medium">
-                                  ({task.checklist.filter((c) => c.done).length}/{task.checklist.length} checklist)
+                                <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
+                                  {t('tasks.checklistCount', {
+                                    done: task.checklist.filter((c) => c.done).length,
+                                    total: task.checklist.length,
+                                  })}
                                 </span>
                               )}
                             </div>
@@ -476,20 +489,20 @@ export default function TaskList({
                             <select
                               disabled={!editable}
                               value={task.status}
-                              aria-label={`Thay đổi trạng thái cho task ${task.title}`}
+                              aria-label={`${t('tasks.quickStatusChange')}: ${task.title}`}
                               title={
                                 !editable
-                                  ? getRoleRestrictionMessage('thay đổi trạng thái task này', userRole)
-                                  : 'Thay đổi trạng thái nhanh'
+                                  ? getRoleRestrictionMessage(t('action.changeStatus'), userRole, t)
+                                  : t('tasks.quickStatusChange')
                               }
                               onChange={(e) => {
                                 handleQuickStatusChange(task, e.target.value as TaskStatus);
                               }}
-                              className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 disabled:opacity-50 cursor-pointer"
+                              className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-50 cursor-pointer"
                             >
                               {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((st) => (
                                 <option key={st} value={st}>
-                                  {TASK_STATUS_CONFIG[st].label}
+                                  {t(`status.${st}` as TranslationKey)}
                                 </option>
                               ))}
                             </select>
@@ -497,8 +510,8 @@ export default function TaskList({
                             <button
                               type="button"
                               onClick={() => setActiveModalTask(task)}
-                              className="p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
-                              aria-label={`Xem chi tiết task ${task.title}`}
+                              className="p-1.5 rounded-xl text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+                              aria-label={t('tasks.viewDetailAria', { title: task.title })}
                             >
                               <ArrowRight className="h-4 w-4" />
                             </button>
@@ -508,7 +521,7 @@ export default function TaskList({
                     })
                   )}
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -541,59 +554,67 @@ export default function TaskList({
           aria-modal="true"
           aria-labelledby="create-task-modal-title"
         >
-          <div className="relative w-full max-w-lg rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 id="create-task-modal-title" className="text-base font-bold text-white mb-4">
-              Tạo Task Mới
+          <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 id="create-task-modal-title" className="text-base font-bold text-[var(--color-text)] mb-4">
+              {t('tasks.modalCreateTitle')}
             </h3>
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Tiêu đề *</label>
+                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  {t('tasks.formTitle')}
+                </label>
                 <input
                   type="text"
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Ví dụ: Tối ưu hoá shader nước, Vẽ icon trang bị..."
-                  className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  placeholder={t('tasks.formTitlePlaceholder')}
+                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3.5 py-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-zinc-300 block mb-1">Mô tả chi tiết</label>
+                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  {t('tasks.formDescription')}
+                </label>
                 <textarea
                   rows={3}
                   value={newDescription}
                   onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Yêu cầu cụ thể của công việc..."
-                  className="w-full rounded-xl border border-zinc-800 bg-[#171924] p-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                  placeholder={t('tasks.formDescPlaceholder')}
+                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">Độ ưu tiên</label>
+                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                    {t('tasks.formPriority')}
+                  </label>
                   <select
                     value={newPriority}
                     onChange={(e) => setNewPriority(e.target.value as TaskPriority)}
-                    className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                   >
                     {(Object.keys(TASK_PRIORITY_CONFIG) as TaskPriority[]).map((pri) => (
                       <option key={pri} value={pri}>
-                        {TASK_PRIORITY_CONFIG[pri].label}
+                        {t(`priority.${pri}` as TranslationKey)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">Người phụ trách</label>
+                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                    {t('tasks.formAssignee')}
+                  </label>
                   <select
                     value={newAssigneeId}
                     onChange={(e) => setNewAssigneeId(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                   >
-                    <option value="">Chưa gán</option>
+                    <option value="">{t('tasks.unassigned')}</option>
                     {members.map((m) => (
                       <option key={m.user_id} value={m.user_id}>
                         {m.profile.display_name}
@@ -605,45 +626,49 @@ export default function TaskList({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">Trạng thái khởi tạo</label>
+                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                    {t('tasks.formInitialStatus')}
+                  </label>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value as TaskStatus)}
-                    className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                   >
                     {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((st) => (
                       <option key={st} value={st}>
-                        {TASK_STATUS_CONFIG[st].label}
+                        {t(`status.${st}` as TranslationKey)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-zinc-300 block mb-1">Hạn chót (Deadline)</label>
+                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                    {t('tasks.formDeadline')}
+                  </label>
                   <input
                     type="date"
                     value={newDeadline}
                     onChange={(e) => setNewDeadline(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-[#171924] px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800/80">
-                <button
+              <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border)]">
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setShowCreateModal(false)}
-                  className="rounded-xl px-4 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white"
                 >
-                  Hủy
-                </button>
-                <button
+                  {t('tasks.formCancel')}
+                </Button>
+                <Button
                   type="submit"
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500"
+                  variant="primary"
                 >
-                  Tạo Task
-                </button>
+                  {t('tasks.formSubmit')}
+                </Button>
               </div>
             </form>
           </div>

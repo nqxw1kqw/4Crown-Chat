@@ -8,9 +8,9 @@ import VideoGallery from '@/components/videos/VideoGallery';
 import FileVault from '@/components/files/FileVault';
 import MemberManagement from '@/components/members/MemberManagement';
 import { ToastProvider } from '@/components/ui/Toast';
-import {
-  MOCK_CURRENT_USER,
-} from '@/lib/mock-data';
+import { LocaleProvider } from '@/i18n/LocaleContext';
+import { MOCK_CURRENT_USER } from '@/lib/mock-data';
+import { DEFAULT_PROJECT_ID, DEFAULT_USER_ID } from '@/lib/constants';
 import { Task, GameplayVideo, FileRecord, ProjectRole, ProjectMember, Profile } from '@/types/database';
 
 export default function Home() {
@@ -24,8 +24,8 @@ export default function Home() {
   const [members, setMembers] = useState<(ProjectMember & { profile: Profile })[]>([
     {
       id: 'pm-1',
-      project_id: 'proj-1',
-      user_id: 'user-shin',
+      project_id: DEFAULT_PROJECT_ID,
+      user_id: DEFAULT_USER_ID,
       role: 'OWNER',
       created_at: '2026-10-08T00:00:00Z',
       profile: MOCK_CURRENT_USER,
@@ -37,11 +37,11 @@ export default function Home() {
   const [selectedVideo, setSelectedVideo] = useState<GameplayVideo | null>(null);
 
   const currentProject = {
-    id: 'proj-1',
+    id: DEFAULT_PROJECT_ID,
     name: 'Game Team Project',
     description: 'Dự án mới sẵn sàng để bắt đầu',
     status: 'active',
-    created_by: 'user-shin',
+    created_by: DEFAULT_USER_ID,
     created_at: '2026-10-08T00:00:00Z',
     updated_at: '2026-10-08T00:00:00Z',
   };
@@ -117,93 +117,95 @@ export default function Home() {
   };
 
   return (
-    <ToastProvider>
-      <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col selection:bg-indigo-500 selection:text-white">
-        {/* Top Navbar */}
-        <Navbar
-          currentTab={currentTab}
-          onTabChange={(tab) => {
-            setCurrentTab(tab);
-            setSelectedTaskId(null);
-            setSelectedVideo(null);
-          }}
-          currentRole={currentRole}
-          onRoleChange={(role) => setCurrentRole(role)}
-          projectName={currentProject.name}
-        />
-
-        {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
-        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
-        {currentTab === 'dashboard' && (
-          <DashboardOverview
-            tasks={tasks}
-            videos={videos}
-            files={files}
-            currentUserId={currentUserId}
-            userRole={currentRole}
-            onSelectTask={(task) => {
-              setSelectedTaskId(task.id);
-              setCurrentTab('tasks');
+    <LocaleProvider>
+      <ToastProvider>
+        <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] flex flex-col selection:bg-indigo-500 selection:text-white">
+          {/* Top Navbar */}
+          <Navbar
+            currentTab={currentTab}
+            onTabChange={(tab) => {
+              setCurrentTab(tab);
+              setSelectedTaskId(null);
+              setSelectedVideo(null);
             }}
-            onSelectVideo={(video) => {
-              setSelectedVideo(video);
-              setCurrentTab('videos');
-            }}
-            onNavigateTab={(tab) => setCurrentTab(tab)}
+            currentRole={currentRole}
+            onRoleChange={(role) => setCurrentRole(role)}
+            projectName={currentProject.name}
           />
-        )}
 
-        {currentTab === 'tasks' && (
-          <TaskList
-            tasks={tasks}
-            members={members}
-            currentUserId={currentUserId}
-            userRole={currentRole}
-            onUpdateTask={handleUpdateTask}
-            onCreateTask={handleCreateTask}
-            onDeleteTask={handleDeleteTask}
-            selectedTaskId={selectedTaskId}
-            onClearSelectedTaskId={() => setSelectedTaskId(null)}
-          />
-        )}
+          {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
+          <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
+            {currentTab === 'dashboard' && (
+              <DashboardOverview
+                tasks={tasks}
+                videos={videos}
+                files={files}
+                currentUserId={currentUserId}
+                userRole={currentRole}
+                onSelectTask={(task) => {
+                  setSelectedTaskId(task.id);
+                  setCurrentTab('tasks');
+                }}
+                onSelectVideo={(video) => {
+                  setSelectedVideo(video);
+                  setCurrentTab('videos');
+                }}
+                onNavigateTab={(tab) => setCurrentTab(tab)}
+              />
+            )}
 
-        {currentTab === 'videos' && (
-          <VideoGallery
-            videos={videos}
-            userRole={currentRole}
-            currentUserId={currentUserId}
-            projectId={currentProject.id}
-            onAddVideo={handleAddVideo}
-            onDeleteVideo={handleDeleteVideo}
-            selectedVideo={selectedVideo}
-            onClearSelectedVideo={() => setSelectedVideo(null)}
-          />
-        )}
+            {currentTab === 'tasks' && (
+              <TaskList
+                tasks={tasks}
+                members={members}
+                currentUserId={currentUserId}
+                userRole={currentRole}
+                onUpdateTask={handleUpdateTask}
+                onCreateTask={handleCreateTask}
+                onDeleteTask={handleDeleteTask}
+                selectedTaskId={selectedTaskId}
+                onClearSelectedTaskId={() => setSelectedTaskId(null)}
+              />
+            )}
 
-        {currentTab === 'files' && (
-          <FileVault
-            files={files}
-            tasks={tasks}
-            userRole={currentRole}
-            currentUserId={currentUserId}
-            projectId={currentProject.id}
-            onAddFile={handleAddFile}
-            onDeleteFile={handleDeleteFile}
-          />
-        )}
+            {currentTab === 'videos' && (
+              <VideoGallery
+                videos={videos}
+                userRole={currentRole}
+                currentUserId={currentUserId}
+                projectId={currentProject.id}
+                onAddVideo={handleAddVideo}
+                onDeleteVideo={handleDeleteVideo}
+                selectedVideo={selectedVideo}
+                onClearSelectedVideo={() => setSelectedVideo(null)}
+              />
+            )}
 
-        {currentTab === 'members' && (
-          <MemberManagement
-            members={members}
-            userRole={currentRole}
-            currentUserId={currentUserId}
-            onUpdateRole={handleUpdateRole}
-            onRemoveMember={handleRemoveMember}
-            onAddMember={handleAddMember}
-          />
-        )}
-      </main>
-    </div>
-  </ToastProvider>
+            {currentTab === 'files' && (
+              <FileVault
+                files={files}
+                tasks={tasks}
+                userRole={currentRole}
+                currentUserId={currentUserId}
+                projectId={currentProject.id}
+                onAddFile={handleAddFile}
+                onDeleteFile={handleDeleteFile}
+              />
+            )}
+
+            {currentTab === 'members' && (
+              <MemberManagement
+                members={members}
+                userRole={currentRole}
+                currentUserId={currentUserId}
+                onUpdateRole={handleUpdateRole}
+                onRemoveMember={handleRemoveMember}
+                onAddMember={handleAddMember}
+              />
+            )}
+          </main>
+        </div>
+      </ToastProvider>
+    </LocaleProvider>
   );
 }

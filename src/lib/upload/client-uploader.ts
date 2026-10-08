@@ -24,10 +24,15 @@ export interface VideoMetadataExtraction {
 /**
  * Kiểm tra xem phần mở rộng có kén trình duyệt không (.mov, .mkv)
  */
-export function isKénTrìnhDuyệtFormat(filename: string): boolean {
+export function isBrowserUnsupportedFormat(filename: string): boolean {
   const lower = filename.toLowerCase();
   return lower.endsWith('.mov') || lower.endsWith('.mkv');
 }
+
+/**
+ * Deprecated alias cho tương thích ngược
+ */
+export const isKénTrìnhDuyệtFormat = isBrowserUnsupportedFormat;
 
 /**
  * Kiểm tra tính hợp lệ của file trước khi upload
@@ -36,7 +41,7 @@ export function validateUploadFile(
   file: File,
   kind: UploadKind,
   maxSizeOverride?: number
-): { valid: boolean; error?: string; isKénTrìnhDuyệt?: boolean } {
+): { valid: boolean; error?: string; isBrowserUnsupported?: boolean; isKénTrìnhDuyệt?: boolean } {
   const limitConfig = UPLOAD_LIMITS[kind];
   if (!limitConfig) {
     return { valid: false, error: 'Loại file không được hỗ trợ.' };
@@ -60,9 +65,11 @@ export function validateUploadFile(
     };
   }
 
+  const unsupported = isBrowserUnsupportedFormat(file.name);
   return {
     valid: true,
-    isKénTrìnhDuyệt: isKénTrìnhDuyệtFormat(file.name),
+    isBrowserUnsupported: unsupported,
+    isKénTrìnhDuyệt: unsupported,
   };
 }
 
@@ -82,7 +89,7 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadataExt
         resolve({
           duration: 0,
           thumbnailBlob: null,
-          decodeWarning: isKénTrìnhDuyệtFormat(file.name),
+          decodeWarning: isBrowserUnsupportedFormat(file.name),
         });
       }
     }, 3500);
@@ -161,7 +168,7 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadataExt
       resolve({
         duration: 0,
         thumbnailBlob: null,
-        decodeWarning: isKénTrìnhDuyệtFormat(file.name),
+        decodeWarning: isBrowserUnsupportedFormat(file.name),
       });
     };
   });

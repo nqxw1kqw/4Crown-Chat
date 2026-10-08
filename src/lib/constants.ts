@@ -40,3 +40,8 @@ export const TASK_PRIORITY_CONFIG = {
   HIGH: { label: 'Cao', color: 'text-amber-400' },
   CRITICAL: { label: 'Khẩn cấp', color: 'text-rose-500 font-bold' },
 } as const;
+
+// Hằng số mặc định cho MVP testing
+export const DEFAULT_PROJECT_ID = 'proj-1';
+export const DEFAULT_USER_ID = 'user-shin';
+

@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Inter, Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
+const inter = Inter({
+  variable: '--font-inter',
+  subsets: ['latin', 'vietnamese'],
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const notoSansJP = Noto_Sans_JP({
+  variable: '--font-noto-sans-jp',
   subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -25,9 +28,9 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${inter.variable} ${notoSansJP.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#090a0f] text-zinc-100">
+      <body className="min-h-full flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
         {children}
       </body>
     </html>

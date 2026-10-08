@@ -91,7 +91,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => removeToast(toast.id)}
                 className="shrink-0 text-zinc-400 hover:text-white p-0.5 rounded transition-colors"
-                aria-label="Đóng thông báo"
+                aria-label="Close"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

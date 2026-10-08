@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { useLocale } from '@/i18n/useLocale';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -20,30 +21,32 @@ export default function ConfirmDialog({
   title,
   description,
   targetName,
-  confirmLabel = 'Xóa vĩnh viễn',
-  cancelLabel = 'Hủy bỏ',
+  confirmLabel,
+  cancelLabel,
   isDangerous = true,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useLocale();
   const dialogRef = useRef<HTMLDivElement>(null);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
+  const finalConfirmLabel =
+    confirmLabel || (isDangerous ? t('confirm.defaultDangerousConfirm') : t('common.confirm'));
+  const finalCancelLabel = cancelLabel || t('common.cancel');
+
   useEffect(() => {
     if (isOpen) {
       previousActiveElementRef.current = document.activeElement as HTMLElement;
-      // Focus vào nút xác nhận khi mở
       setTimeout(() => {
         confirmBtnRef.current?.focus();
       }, 50);
 
-      // Bắt phím Esc để đóng dialog
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           onCancel();
         }
-        // Focus trap đơn giản
         if (e.key === 'Tab' && dialogRef.current) {
           const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
             'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -65,7 +68,6 @@ export default function ConfirmDialog({
       window.addEventListener('keydown', handleKeyDown);
       return () => {
         window.removeEventListener('keydown', handleKeyDown);
-        // Trả focus về phần tử kích hoạt trước đó
         previousActiveElementRef.current?.focus();
       };
     }
@@ -83,28 +85,28 @@ export default function ConfirmDialog({
     >
       <div
         ref={dialogRef}
-        className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl focus:outline-none"
+        className="relative w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 shadow-2xl focus:outline-none"
       >
         <div className="flex items-start gap-3.5">
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
               isDangerous
-                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                ? 'bg-[var(--color-danger)]/15 text-[var(--color-danger)] border border-[var(--color-danger)]/30'
+                : 'bg-[var(--color-warning)]/15 text-[var(--color-warning)] border border-[var(--color-warning)]/30'
             }`}
           >
             {isDangerous ? <Trash2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
           </div>
 
           <div className="flex-1 min-w-0">
-            <h3 id="confirm-dialog-title" className="text-sm font-bold text-white">
+            <h3 id="confirm-dialog-title" className="text-sm font-bold text-[var(--color-text)]">
               {title}
             </h3>
-            <p id="confirm-dialog-desc" className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            <p id="confirm-dialog-desc" className="text-xs text-[var(--color-text-muted)] mt-1 leading-relaxed">
               {description}
             </p>
             {targetName && (
-              <div className="mt-2.5 p-2 rounded-lg border border-zinc-800 bg-[#171924] text-xs font-mono text-zinc-300 break-all">
+              <div className="mt-2.5 p-2 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text)] break-all">
                 {targetName}
               </div>
             )}
@@ -113,32 +115,32 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="text-zinc-500 hover:text-white p-1 rounded-lg focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
-            aria-label="Đóng hộp thoại"
+            className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-1 rounded-lg focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors cursor-pointer"
+            aria-label={t('confirm.closeAria')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-zinc-800/80">
+        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border border-zinc-700/60 bg-zinc-800/80 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
+            className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-4 py-2 text-xs font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-raised)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors cursor-pointer"
           >
-            {cancelLabel}
+            {finalCancelLabel}
           </button>
           <button
             ref={confirmBtnRef}
             type="button"
             onClick={onConfirm}
-            className={`rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors ${
+            className={`rounded-xl px-4 py-2 text-xs font-semibold text-white shadow-lg focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] transition-colors cursor-pointer ${
               isDangerous
-                ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/30'
-                : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
+                ? 'bg-[var(--color-danger)] hover:bg-rose-500 shadow-rose-600/30'
+                : 'bg-[var(--color-accent)] hover:bg-indigo-500 shadow-indigo-600/30'
             }`}
           >
-            {confirmLabel}
+            {finalConfirmLabel}
           </button>
         </div>
       </div>
