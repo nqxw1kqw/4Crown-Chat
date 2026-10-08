@@ -27,7 +27,7 @@ export default function IdentityModal({
   currentProfile,
   onSelectIdentity,
 }: IdentityModalProps) {
-  const { t } = useLocale();
+  const { locale, setLocale, t } = useLocale();
   const [selectedSlot, setSelectedSlot] = useState<SlotId | null>(currentProfile.currentSlotId || 'm1');
   const [selectedRole, setSelectedRole] = useState<ProjectRole>(currentProfile.role || 'ADMIN');
 
@@ -52,8 +52,42 @@ export default function IdentityModal({
       aria-labelledby="identity-modal-title"
     >
       <div className="relative w-full max-w-xl flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden p-6 sm:p-8 space-y-6">
+        {/* Language switch toggle (đổi ngôn ngữ trực tiếp tại màn identity) */}
+        <div
+          className="absolute top-4 right-4 flex items-center rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-strong)] p-1 text-xs"
+          role="group"
+          aria-label={t('nav.languageSwitch')}
+        >
+          <button
+            type="button"
+            onClick={() => setLocale('vi')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              locale === 'vi'
+                ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+            }`}
+            aria-pressed={locale === 'vi'}
+            title="Tiếng Việt"
+          >
+            VI
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocale('ja')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              locale === 'ja'
+                ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+            }`}
+            aria-pressed={locale === 'ja'}
+            title="日本語"
+          >
+            JA
+          </button>
+        </div>
+
         {/* Header */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 pt-2 sm:pt-0">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/20 mb-1">
             <UserCheck className="h-6 w-6" />
           </div>
@@ -131,7 +165,7 @@ export default function IdentityModal({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-md border ${ROLE_BADGE_COLORS[role]}`}>
-                      {role}
+                      {t(`role.${role}` as Parameters<typeof t>[0])}
                     </span>
                     {isSelected && <ShieldCheck className="h-4 w-4 text-indigo-400" />}
                   </div>
@@ -155,7 +189,7 @@ export default function IdentityModal({
             disabled={!selectedSlot}
             icon={Sparkles}
           >
-            {t('identity.confirm')}
+            {t('identity.start')}
           </Button>
         </div>
       </div>

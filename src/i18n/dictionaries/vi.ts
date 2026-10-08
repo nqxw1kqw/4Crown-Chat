@@ -196,7 +196,18 @@ export const vi = {
   'files.downloadNoticeTitle': 'Thông báo tải file',
   'files.downloadNoticeMsg': 'Tập tin "{name}" đã được lưu an toàn trong hệ thống.',
 
-  // Profile & Identity (Vòng 3 - Danh tính cục bộ)
+  // Boot Flow (Vòng 4 - Khởi động song ngữ)
+  'boot.language.title': 'Chọn ngôn ngữ của bạn',
+  'boot.language.subtitle': 'Vui lòng chọn ngôn ngữ để bắt đầu trải nghiệm hệ thống',
+  'boot.language.viSubtitle': 'Vietnamese',
+  'boot.language.jaSubtitle': 'Japanese',
+  'boot.language.continue': 'Tiếp tục',
+  'boot.loading.init': 'Đang khởi tạo…',
+  'boot.loading.connect': 'Đang kết nối kho dữ liệu…',
+  'boot.loading.tasks': 'Đang tải danh sách công việc…',
+  'boot.loading.ready': 'Sẵn sàng',
+
+  // Profile & Identity (Vòng 3 & 4 - Danh tính cục bộ & Song ngữ)
   'profile.myProfile': 'Hồ sơ của tôi',
   'profile.title': 'Thiết lập hồ sơ',
   'profile.currentSlot': 'Nhân vật của bạn',
@@ -211,10 +222,11 @@ export const vi = {
   'identity.pickDescription': 'Chọn nhân vật bạn sẽ đại diện trong nhóm 4 người. Dữ liệu lưu trên máy này.',
   'identity.selectRole': 'Chọn vai trò hiển thị',
   'identity.confirm': 'Bắt đầu làm việc',
-  'role.desc.OWNER': 'Chủ dự án',
-  'role.desc.ADMIN': 'Quản trị viên, có thể thao tác mọi thứ.',
-  'role.desc.MEMBER': 'Thành viên nhóm phát triển',
-  'role.desc.VIEWER': 'Người xem dự án',
+  'identity.start': 'Bắt đầu',
+  'role.desc.OWNER': 'Người phụ trách dự án.',
+  'role.desc.ADMIN': 'Quản lý và thao tác mọi nội dung.',
+  'role.desc.MEMBER': 'Tham gia thực hiện công việc.',
+  'role.desc.VIEWER': 'Chỉ xem, dùng để theo dõi tiến độ.',
   'assignee.unassigned': 'Chưa gán',
   'assignee.unknown': 'Không xác định',
 

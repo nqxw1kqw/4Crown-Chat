@@ -6,6 +6,8 @@ import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import TaskList from '@/components/tasks/TaskList';
 import VideoGallery from '@/components/videos/VideoGallery';
 import FileVault from '@/components/files/FileVault';
+import LanguageGate from '@/components/boot/LanguageGate';
+import BootLoader from '@/components/boot/BootLoader';
 import IdentityModal from '@/components/profile/IdentityModal';
 import ProfileModal from '@/components/profile/ProfileModal';
 import { ToastProvider } from '@/components/ui/Toast';
@@ -20,9 +22,14 @@ import {
 } from '@/lib/profile';
 import { Task, GameplayVideo, FileRecord } from '@/types/database';
 
+type BootStep = 'language' | 'loading' | 'identity' | 'app';
+
 export default function Home() {
   const isMounted = useIsMounted();
   const profile = useLocalProfile();
+
+  // Luồng khởi động: language -> loading -> identity (nếu chưa có slot) -> app
+  const [bootStep, setBootStep] = useState<BootStep>('language');
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -81,8 +88,22 @@ export default function Home() {
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
+  // Boot transitions
+  const handleLanguageContinue = () => {
+    setBootStep('loading');
+  };
+
+  const handleLoadingComplete = () => {
+    if (!profile.currentSlotId) {
+      setBootStep('identity');
+    } else {
+      setBootStep('app');
+    }
+  };
+
   const handleIdentityConfirm = (updated: LocalProfileState) => {
     saveStoredProfile(updated);
+    setBootStep('app');
   };
 
   const handleUpdateProfile = (updated: LocalProfileState) => {
@@ -92,6 +113,7 @@ export default function Home() {
   const handleResetIdentity = () => {
     resetStoredProfile();
     setShowProfileModal(false);
+    setBootStep('identity');
   };
 
   const currentSlotId = profile.currentSlotId;
@@ -100,94 +122,109 @@ export default function Home() {
     <LocaleProvider>
       <ToastProvider>
         <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] flex flex-col selection:bg-indigo-500 selection:text-white">
-          {/* Top Navbar */}
-          <Navbar
-            currentTab={currentTab}
-            onTabChange={(tab) => {
-              setCurrentTab(tab);
-              setSelectedTaskId(null);
-              setSelectedVideo(null);
-            }}
-            projectName={currentProject.name}
-            currentProfile={profile}
-            onOpenProfile={() => setShowProfileModal(true)}
-          />
+          {/* 1. Màn hình chọn ngôn ngữ */}
+          {bootStep === 'language' && (
+            <LanguageGate onContinue={handleLanguageContinue} />
+          )}
 
-          {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
-          <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
-            {currentTab === 'dashboard' && (
-              <DashboardOverview
-                tasks={tasks}
-                videos={videos}
-                files={files}
-                currentUserId={currentSlotId || ''}
-                onSelectTask={(task) => {
-                  setSelectedTaskId(task.id);
-                  setCurrentTab('tasks');
-                }}
-                onSelectVideo={(video) => {
-                  setSelectedVideo(video);
-                  setCurrentTab('videos');
-                }}
-                onNavigateTab={(tab) => setCurrentTab(tab)}
-              />
-            )}
+          {/* 2. Màn hình loading giả (2.5 giây) */}
+          {bootStep === 'loading' && (
+            <BootLoader onComplete={handleLoadingComplete} />
+          )}
 
-            {currentTab === 'tasks' && (
-              <TaskList
-                tasks={tasks}
-                profileNames={profile.names}
-                currentSlotId={currentSlotId}
-                onUpdateTask={handleUpdateTask}
-                onCreateTask={handleCreateTask}
-                onDeleteTask={handleDeleteTask}
-                selectedTaskId={selectedTaskId}
-                onClearSelectedTaskId={() => setSelectedTaskId(null)}
-              />
-            )}
-
-            {currentTab === 'videos' && (
-              <VideoGallery
-                videos={videos}
-                currentUserId={currentSlotId || 'm1'}
-                projectId={currentProject.id}
-                onAddVideo={handleAddVideo}
-                onDeleteVideo={handleDeleteVideo}
-                selectedVideo={selectedVideo}
-                onClearSelectedVideo={() => setSelectedVideo(null)}
-              />
-            )}
-
-            {currentTab === 'files' && (
-              <FileVault
-                files={files}
-                tasks={tasks}
-                currentUserId={currentSlotId || 'm1'}
-                projectId={currentProject.id}
-                onAddFile={handleAddFile}
-                onDeleteFile={handleDeleteFile}
-              />
-            )}
-          </main>
-
-          {/* Identity Selection Modal (Bắt buộc chọn lần đầu khi chưa có slotId) */}
-          {isMounted && (
+          {/* 3. Màn hình chọn danh tính / vai trò */}
+          {bootStep === 'identity' && (
             <IdentityModal
-              isOpen={!profile.currentSlotId}
+              isOpen={true}
               currentProfile={profile}
               onSelectIdentity={handleIdentityConfirm}
             />
           )}
 
-          {/* Profile Modal (Hồ sơ của tôi trên Navbar) */}
-          {isMounted && (
-            <ProfileModal
-              isOpen={showProfileModal}
-              onClose={() => setShowProfileModal(false)}
-              currentProfile={profile}
-              onUpdateProfile={handleUpdateProfile}
-              onResetIdentity={handleResetIdentity}
-            />
+          {/* 4. Ứng dụng chính (Chỉ render sau khi đã vào bước 'app') */}
+          {bootStep === 'app' && (
+            <>
+              {/* Top Navbar */}
+              <Navbar
+                currentTab={currentTab}
+                onTabChange={(tab) => {
+                  setCurrentTab(tab);
+                  setSelectedTaskId(null);
+                  setSelectedVideo(null);
+                }}
+                projectName={currentProject.name}
+                currentProfile={profile}
+                onOpenProfile={() => setShowProfileModal(true)}
+              />
+
+              {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
+              <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
+                {currentTab === 'dashboard' && (
+                  <DashboardOverview
+                    tasks={tasks}
+                    videos={videos}
+                    files={files}
+                    currentUserId={currentSlotId || ''}
+                    onSelectTask={(task) => {
+                      setSelectedTaskId(task.id);
+                      setCurrentTab('tasks');
+                    }}
+                    onSelectVideo={(video) => {
+                      setSelectedVideo(video);
+                      setCurrentTab('videos');
+                    }}
+                    onNavigateTab={(tab) => setCurrentTab(tab)}
+                  />
+                )}
+
+                {currentTab === 'tasks' && (
+                  <TaskList
+                    tasks={tasks}
+                    profileNames={profile.names}
+                    currentSlotId={currentSlotId}
+                    onUpdateTask={handleUpdateTask}
+                    onCreateTask={handleCreateTask}
+                    onDeleteTask={handleDeleteTask}
+                    selectedTaskId={selectedTaskId}
+                    onClearSelectedTaskId={() => setSelectedTaskId(null)}
+                  />
+                )}
+
+                {currentTab === 'videos' && (
+                  <VideoGallery
+                    videos={videos}
+                    currentUserId={currentSlotId || 'm1'}
+                    projectId={currentProject.id}
+                    onAddVideo={handleAddVideo}
+                    onDeleteVideo={handleDeleteVideo}
+                    selectedVideo={selectedVideo}
+                    onClearSelectedVideo={() => setSelectedVideo(null)}
+                  />
+                )}
+
+                {currentTab === 'files' && (
+                  <FileVault
+                    files={files}
+                    tasks={tasks}
+                    currentUserId={currentSlotId || 'm1'}
+                    projectId={currentProject.id}
+                    onAddFile={handleAddFile}
+                    onDeleteFile={handleDeleteFile}
+                  />
+                )}
+              </main>
+
+              {/* Profile Modal (Hồ sơ của tôi trên Navbar) */}
+              {isMounted && (
+                <ProfileModal
+                  isOpen={showProfileModal}
+                  onClose={() => setShowProfileModal(false)}
+                  currentProfile={profile}
+                  onUpdateProfile={handleUpdateProfile}
+                  onResetIdentity={handleResetIdentity}
+                />
+              )}
+            </>
           )}
         </div>
       </ToastProvider>

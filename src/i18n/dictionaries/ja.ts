@@ -198,7 +198,18 @@ export const ja: Record<TranslationKey, string> = {
   'files.downloadNoticeTitle': 'ダウンロード通知',
   'files.downloadNoticeMsg': 'ファイル「{name}」はシステムに安全に保存されています。',
 
-  // Profile & Identity (Vòng 3 - Danh tính cục bộ)
+  // Boot Flow (Vòng 4 - Khởi động song ngữ)
+  'boot.language.title': '言語を選択してください',
+  'boot.language.subtitle': 'システムの利用を開始する言語を選択してください',
+  'boot.language.viSubtitle': 'Vietnamese',
+  'boot.language.jaSubtitle': 'Japanese',
+  'boot.language.continue': '続ける',
+  'boot.loading.init': '初期化しています…',
+  'boot.loading.connect': 'データ保管庫に接続しています…',
+  'boot.loading.tasks': 'タスク一覧を読み込んでいます…',
+  'boot.loading.ready': '準備完了',
+
+  // Profile & Identity (Vòng 3 & 4 - Danh tính cục bộ & Song ngữ)
   'profile.myProfile': 'マイプロフィール',
   'profile.title': 'プロフィール設定',
   'profile.currentSlot': 'あなたのスロット',
@@ -213,10 +224,11 @@ export const ja: Record<TranslationKey, string> = {
   'identity.pickDescription': '4人のチームからあなたのスロットを選択してください。このデバイスに保存されます。',
   'identity.selectRole': '表示する役割を選択',
   'identity.confirm': '作業を開始する',
+  'identity.start': '開始',
   'role.desc.OWNER': 'プロジェクトの責任者です。',
-  'role.desc.ADMIN': 'すべての操作ができます。',
-  'role.desc.MEMBER': '開発チームのメンバーです。',
-  'role.desc.VIEWER': 'プロジェクトの閲覧者です。',
+  'role.desc.ADMIN': 'すべての内容を管理・操作できます。',
+  'role.desc.MEMBER': '作業に参加します。',
+  'role.desc.VIEWER': '閲覧のみ可能です。進捗の確認用です。',
   'assignee.unassigned': '未割り当て',
   'assignee.unknown': '不明',
 

@@ -186,7 +186,7 @@ export default function ProfileModal({
                     aria-pressed={isSelected}
                   >
                     <span className={`text-xs block ${ROLE_BADGE_COLORS[role]}`}>
-                      {role}
+                      {t(`role.${role}` as Parameters<typeof t>[0])}
                     </span>
                   </button>
                 );

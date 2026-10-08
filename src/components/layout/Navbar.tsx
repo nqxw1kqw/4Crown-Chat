@@ -156,8 +156,8 @@ export default function Navbar({
               <span className="font-semibold text-[var(--color-text)] max-w-[100px] sm:max-w-[130px] truncate">
                 {currentDisplayName}
               </span>
-              <span className={`rounded-md border px-1.5 py-0.2 text-[10px] font-bold ${ROLE_COLOR_STYLES[currentProfile.role]}`}>
-                {currentProfile.role}
+              <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ROLE_COLOR_STYLES[currentProfile.role]}`}>
+                {t(`role.${currentProfile.role}` as Parameters<typeof t>[0])}
               </span>
             </button>
 
@@ -212,7 +212,7 @@ export default function Navbar({
                 <User className="h-5 w-5 text-indigo-400" aria-hidden="true" />
                 <span>{t('profile.myProfile')}</span>
                 <span className={`ml-auto rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ROLE_COLOR_STYLES[currentProfile.role]}`}>
-                  {currentProfile.role}
+                  {t(`role.${currentProfile.role}` as Parameters<typeof t>[0])}
                 </span>
               </button>
             </div>
