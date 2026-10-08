@@ -1,9 +1,8 @@
 -- ==============================================================================
--- Game Team Hub: MVP v0.1 Initial Schema & RLS Policies
--- Cập nhật: 08/10/2026
+-- Game Team Hub: MVP v0.1 Initial Schema & RLS Policies (Idempotent)
 -- ==============================================================================
 
--- 1. PROFILES (liên kết với auth.users)
+-- 1. PROFILES
 create table if not exists public.profiles (
     id uuid primary key references auth.users(id) on delete cascade,
     display_name text not null default 'Game Dev',
@@ -157,7 +156,6 @@ create table if not exists public.uploads (
 -- HELPER FUNCTIONS FOR ROW LEVEL SECURITY (RLS)
 -- ==============================================================================
 
--- Lấy role của user hiện tại trong 1 project cụ thể
 create or replace function public.current_user_project_role(p_project_id uuid)
 returns text
 language sql
@@ -169,7 +167,6 @@ as $$
     limit 1;
 $$;
 
--- Kiểm tra user có phải thành viên của project không (bất kỳ role nào)
 create or replace function public.is_project_member(p_project_id uuid)
 returns boolean
 language sql
@@ -198,17 +195,17 @@ alter table public.uploads enable row level security;
 
 
 -- ==============================================================================
--- RLS POLICIES
+-- RLS POLICIES (Có DROP IF EXISTS để chạy lại bao nhiêu lần cũng không báo lỗi)
 -- ==============================================================================
 
 -- 1. PROFILES
--- Mọi user đã đăng nhập đều xem được profiles (để hiển thị avatar, assignee, etc.)
+drop policy if exists "Authenticated users can view profiles" on public.profiles;
 create policy "Authenticated users can view profiles"
     on public.profiles for select
     to authenticated
     using (true);
 
--- User chỉ sửa được profile của chính mình
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
     on public.profiles for update
     to authenticated
@@ -216,25 +213,25 @@ create policy "Users can update their own profile"
 
 
 -- 2. PROJECTS
--- Xem: là thành viên của project
+drop policy if exists "Members can view projects" on public.projects;
 create policy "Members can view projects"
     on public.projects for select
     to authenticated
     using (public.is_project_member(id));
 
--- Tạo: mọi authenticated user đều có thể tạo project mới
+drop policy if exists "Authenticated users can create projects" on public.projects;
 create policy "Authenticated users can create projects"
     on public.projects for insert
     to authenticated
     with check (auth.uid() = created_by);
 
--- Sửa cài đặt: chỉ OWNER
+drop policy if exists "Owners can update project" on public.projects;
 create policy "Owners can update project"
     on public.projects for update
     to authenticated
     using (public.current_user_project_role(id) = 'OWNER');
 
--- Xóa: chỉ OWNER
+drop policy if exists "Owners can delete project" on public.projects;
 create policy "Owners can delete project"
     on public.projects for delete
     to authenticated
@@ -242,23 +239,25 @@ create policy "Owners can delete project"
 
 
 -- 3. PROJECT_MEMBERS
--- Xem: thành viên trong cùng project
+drop policy if exists "Members can view project members" on public.project_members;
 create policy "Members can view project members"
     on public.project_members for select
     to authenticated
     using (public.is_project_member(project_id));
 
--- Quản lý (thêm/sửa/xóa member): OWNER và ADMIN
+drop policy if exists "Owners and Admins can manage members" on public.project_members;
 create policy "Owners and Admins can manage members"
     on public.project_members for insert
     to authenticated
     with check (public.current_user_project_role(project_id) in ('OWNER', 'ADMIN'));
 
+drop policy if exists "Owners and Admins can update members" on public.project_members;
 create policy "Owners and Admins can update members"
     on public.project_members for update
     to authenticated
     using (public.current_user_project_role(project_id) in ('OWNER', 'ADMIN'));
 
+drop policy if exists "Owners and Admins can delete members" on public.project_members;
 create policy "Owners and Admins can delete members"
     on public.project_members for delete
     to authenticated
@@ -266,21 +265,19 @@ create policy "Owners and Admins can delete members"
 
 
 -- 4. TASKS
--- Xem: mọi thành viên trong project (kể cả VIEWER)
+drop policy if exists "Members can view tasks" on public.tasks;
 create policy "Members can view tasks"
     on public.tasks for select
     to authenticated
     using (public.is_project_member(project_id));
 
--- Tạo task: OWNER, ADMIN, MEMBER (VIEWER bị cấm)
+drop policy if exists "Owner Admin Member can create tasks" on public.tasks;
 create policy "Owner Admin Member can create tasks"
     on public.tasks for insert
     to authenticated
     with check (public.current_user_project_role(project_id) in ('OWNER', 'ADMIN', 'MEMBER'));
 
--- Sửa task:
--- OWNER và ADMIN sửa được mọi task.
--- MEMBER chỉ sửa được task mà họ được assign hoặc là người tạo.
+drop policy if exists "Members can update their assigned tasks, Owners/Admins update all" on public.tasks;
 create policy "Members can update their assigned tasks, Owners/Admins update all"
     on public.tasks for update
     to authenticated
@@ -292,7 +289,7 @@ create policy "Members can update their assigned tasks, Owners/Admins update all
         )
     );
 
--- Xóa task: OWNER và ADMIN
+drop policy if exists "Owners and Admins can delete tasks" on public.tasks;
 create policy "Owners and Admins can delete tasks"
     on public.tasks for delete
     to authenticated
@@ -300,7 +297,7 @@ create policy "Owners and Admins can delete tasks"
 
 
 -- 5. TASK_CHECKLIST_ITEMS
--- Xem: nếu xem được task
+drop policy if exists "Members can view task checklist" on public.task_checklist_items;
 create policy "Members can view task checklist"
     on public.task_checklist_items for select
     to authenticated
@@ -312,8 +309,7 @@ create policy "Members can view task checklist"
         )
     );
 
--- Thêm/sửa/xóa checklist:
--- OWNER/ADMIN sửa tất cả; MEMBER sửa checklist của task mình được assign/tạo
+drop policy if exists "Members can manage checklist if they can edit task" on public.task_checklist_items;
 create policy "Members can manage checklist if they can edit task"
     on public.task_checklist_items for all
     to authenticated
@@ -333,19 +329,19 @@ create policy "Members can manage checklist if they can edit task"
 
 
 -- 6. FILES
--- Xem: mọi thành viên trong project (kể cả VIEWER)
+drop policy if exists "Members can view files" on public.files;
 create policy "Members can view files"
     on public.files for select
     to authenticated
     using (public.is_project_member(project_id));
 
--- Upload: OWNER, ADMIN, MEMBER
+drop policy if exists "Owner Admin Member can insert files" on public.files;
 create policy "Owner Admin Member can insert files"
     on public.files for insert
     to authenticated
     with check (public.current_user_project_role(project_id) in ('OWNER', 'ADMIN', 'MEMBER'));
 
--- Xóa file: chỉ OWNER và ADMIN
+drop policy if exists "Owners and Admins can delete files" on public.files;
 create policy "Owners and Admins can delete files"
     on public.files for delete
     to authenticated
@@ -353,19 +349,19 @@ create policy "Owners and Admins can delete files"
 
 
 -- 7. GAMEPLAY_VIDEOS
--- Xem: mọi thành viên trong project (kể cả VIEWER)
+drop policy if exists "Members can view gameplay videos" on public.gameplay_videos;
 create policy "Members can view gameplay videos"
     on public.gameplay_videos for select
     to authenticated
     using (public.is_project_member(project_id));
 
--- Upload: OWNER, ADMIN, MEMBER
+drop policy if exists "Owner Admin Member can insert videos" on public.gameplay_videos;
 create policy "Owner Admin Member can insert videos"
     on public.gameplay_videos for insert
     to authenticated
     with check (public.current_user_project_role(project_id) in ('OWNER', 'ADMIN', 'MEMBER'));
 
--- Xóa video: chỉ OWNER và ADMIN
+drop policy if exists "Owners and Admins can delete videos" on public.gameplay_videos;
 create policy "Owners and Admins can delete videos"
     on public.gameplay_videos for delete
     to authenticated
@@ -373,7 +369,7 @@ create policy "Owners and Admins can delete videos"
 
 
 -- 8. UPLOADS
--- Xem: người tạo upload hoặc OWNER/ADMIN
+drop policy if exists "User can view their uploads or admin can view" on public.uploads;
 create policy "User can view their uploads or admin can view"
     on public.uploads for select
     to authenticated
@@ -382,7 +378,7 @@ create policy "User can view their uploads or admin can view"
         or public.current_user_project_role(project_id) in ('OWNER', 'ADMIN')
     );
 
--- Tạo upload record: OWNER, ADMIN, MEMBER
+drop policy if exists "Owner Admin Member can init uploads" on public.uploads;
 create policy "Owner Admin Member can init uploads"
     on public.uploads for insert
     to authenticated
@@ -391,7 +387,7 @@ create policy "Owner Admin Member can init uploads"
         and public.current_user_project_role(project_id) in ('OWNER', 'ADMIN', 'MEMBER')
     );
 
--- Sửa trạng thái upload (pending -> completed / aborted)
+drop policy if exists "User can update their own upload state" on public.uploads;
 create policy "User can update their own upload state"
     on public.uploads for update
     to authenticated
