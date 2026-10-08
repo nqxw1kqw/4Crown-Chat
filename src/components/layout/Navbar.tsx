@@ -10,7 +10,9 @@ import {
   User,
   Menu,
   X,
+  ExternalLink,
 } from 'lucide-react';
+import { GithubIcon } from '@/components/ui/GithubIcon';
 import { useLocale } from '@/i18n/useLocale';
 import { LocalProfileState, getSlotDisplayName } from '@/lib/profile';
 import { ProjectRole } from '@/types/database';
@@ -72,10 +74,22 @@ export default function Navbar({
                   {t('nav.brand')}
                 </span>
               </div>
-              <div className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-                <span className="font-medium text-[var(--color-text)] truncate max-w-[140px] sm:max-w-[200px]">
+              <div className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
+                <span className="font-medium text-[var(--color-text)] truncate max-w-[120px] sm:max-w-[180px]">
                   {projectName}
                 </span>
+                <span className="text-[var(--color-border)]">•</span>
+                <a
+                  href="https://github.com/nqxw1kqw/Just-a-Fish-Game"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-mono hover:underline transition-colors"
+                  title="Mở GitHub Repository: Just-a-Fish-Game"
+                >
+                <GithubIcon className="h-3 w-3 shrink-0" />
+                  <span>Repo</span>
+                  <ExternalLink className="h-2.5 w-2.5 opacity-70 shrink-0" />
+                </a>
               </div>
             </div>
           </div>
@@ -138,6 +152,20 @@ export default function Navbar({
                 日本語
               </button>
             </div>
+
+            {/* GitHub Repository Link */}
+            <a
+              href="https://github.com/nqxw1kqw/Just-a-Fish-Game"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-raised)] hover:border-indigo-500/40 transition-all duration-150 min-h-[36px] shadow-sm cursor-pointer"
+              title="GitHub: Just-a-Fish-Game"
+              aria-label="GitHub Repository: Just-a-Fish-Game"
+            >
+              <GithubIcon className="h-4 w-4 text-indigo-400 shrink-0" />
+              <span className="hidden lg:inline text-xs font-medium">Fish Game</span>
+              <ExternalLink className="h-3 w-3 opacity-60 hidden sm:inline" />
+            </a>
 
             {/* My Profile Button (Thay thế hoàn toàn Role Switcher) */}
             <button
@@ -212,6 +240,18 @@ export default function Navbar({
                   {t(`role.${currentProfile.role}` as Parameters<typeof t>[0])}
                 </span>
               </button>
+
+              {/* GitHub Link trong Mobile Menu */}
+              <a
+                href="https://github.com/nqxw1kqw/Just-a-Fish-Game"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium min-h-[48px] text-[var(--color-text)] hover:bg-[var(--color-surface-raised)] border border-[var(--color-border)] cursor-pointer mt-2"
+              >
+                <GithubIcon className="h-5 w-5 text-indigo-400" />
+                <span>GitHub: Just-a-Fish-Game</span>
+                <ExternalLink className="h-4 w-4 ml-auto text-[var(--color-text-muted)]" />
+              </a>
             </div>
           </div>
         )}

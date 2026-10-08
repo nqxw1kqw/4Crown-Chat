@@ -34,8 +34,20 @@ export default function Home() {
   const isMounted = useIsMounted();
   const profile = useLocalProfile();
 
-  // Luồng khởi động: language -> loading -> identity (nếu chưa có slot) -> app
-  const [bootStep, setBootStep] = useState<BootStep>('language');
+  // Luồng khởi động: nếu đã có slot danh tính thì vào thẳng app, nếu chưa thì language -> loading -> identity -> app
+  const [bootStep, setBootStep] = useState<BootStep>(() => {
+    if (typeof window === 'undefined') return 'language';
+    try {
+      const raw = localStorage.getItem('gth.profile');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.currentSlotId) {
+          return 'app';
+        }
+      }
+    } catch {}
+    return 'language';
+  });
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -278,9 +290,9 @@ export default function Home() {
             <LanguageGate onContinue={handleLanguageContinue} />
           )}
 
-          {/* 2. Màn hình loading giả (2.5 giây) */}
+          {/* 2. Màn hình loading giả siêu nhanh (0.5 giây) */}
           {bootStep === 'loading' && (
-            <BootLoader onComplete={handleLoadingComplete} />
+            <BootLoader onComplete={handleLoadingComplete} durationMs={500} />
           )}
 
           {/* 3. Màn hình chọn danh tính / vai trò */}

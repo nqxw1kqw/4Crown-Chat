@@ -11,7 +11,9 @@ import {
   ArrowRight,
   User,
   Calendar,
+  ExternalLink,
 } from 'lucide-react';
+import { GithubIcon } from '@/components/ui/GithubIcon';
 import { Task, GameplayVideo, FileRecord, ProjectRole } from '@/types/database';
 import { useLocale } from '@/i18n/useLocale';
 import { Card } from '@/components/ui/Card';
@@ -72,6 +74,36 @@ export default function DashboardOverview({
 
   return (
     <div className="space-y-6">
+      {/* Project & Repository Banner */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-indigo-600/30 to-violet-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+            <GithubIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-[var(--color-text)] flex items-center gap-2">
+              Just a Fish Game
+              <span className="text-[10px] font-semibold font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">
+                GitHub Repo
+              </span>
+            </h2>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+              Source code game indie & video test gameplay
+            </p>
+          </div>
+        </div>
+        <a
+          href="https://github.com/nqxw1kqw/Just-a-Fish-Game"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-[var(--color-accent)] hover:bg-indigo-500 transition-colors shadow-sm shadow-indigo-600/20 shrink-0 cursor-pointer"
+        >
+          <GithubIcon className="h-4 w-4" />
+          <span>Mở GitHub Repository</span>
+          <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+        </a>
+      </div>
+
       {/* 4 Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Tổng tiến độ */}

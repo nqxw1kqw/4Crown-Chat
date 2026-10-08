@@ -11,7 +11,7 @@ interface BootLoaderProps {
 
 export default function BootLoader({
   onComplete,
-  durationMs = 2500,
+  durationMs = 500,
 }: BootLoaderProps) {
   const { t, formatNumber } = useLocale();
   const [progress, setProgress] = useState(0);
@@ -43,10 +43,10 @@ export default function BootLoader({
       } else {
         if (!completedRef.current) {
           completedRef.current = true;
-          // Giữ thêm 200ms khi đạt 100% rồi chuyển tiếp
+          // Giữ thêm 50ms khi đạt 100% rồi chuyển tiếp
           setTimeout(() => {
             onComplete();
-          }, 200);
+          }, 50);
         }
       }
     };
