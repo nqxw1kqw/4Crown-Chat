@@ -9,7 +9,7 @@ import { isBrowserUnsupportedFormat } from '@/lib/upload/client-uploader';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { useLocale } from '@/i18n/useLocale';
 import { TranslationKey } from '@/i18n/dictionaries/vi';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import ConfirmDialog from '@/components/common/confirm-dialog';
 import MemberAvatar from '@/components/common/member-avatar';
 import { useToast } from '@/components/ui/Toast';

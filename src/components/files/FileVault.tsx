@@ -17,7 +17,7 @@ import {
   Clock,
   Loader2,
 } from 'lucide-react';
-import type { UploadKind } from '@/types/database';
+import type { FileRecord, UploadKind } from '@/types/database';
 import {
   uploadLargeFileToR2,
   validateUploadFile,
@@ -28,8 +28,8 @@ import { useAppData } from '@/components/providers/AppDataProvider';
 import { useToast } from '@/components/ui/Toast';
 import { useLocale } from '@/i18n/useLocale';
 import { TranslationKey } from '@/i18n/dictionaries/vi';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Progress } from '@/components/ui/progress';
 import { FieldSelect } from '@/components/common/form';
 import LinkedTaskChip from '@/components/common/linked-task-chip';
@@ -45,6 +45,7 @@ export default function FileVault() {
   const { success, error: toastError, warning } = useToast();
   const { files, tasks, members, memberName, can, deleteFile, refresh } = useAppData();
 
+  const [previewFile, setPreviewFile] = useState<FileRecord | null>(null);
   const [activeFolder, setActiveFolder] = useState('ALL');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -77,6 +78,7 @@ export default function FileVault() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPreviewFile(null);
       if (event.key === 'Escape' && showUploadModal && uploadProgress?.status !== 'uploading') {
         setShowUploadModal(false);
         resetForm();
@@ -276,6 +278,7 @@ export default function FileVault() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
+                    {file.preview_url && <Button variant="secondary" size="sm" onClick={() => setPreviewFile(file)} aria-label={t('files.previewAria', { name: file.name })}><ImageIcon className="size-4" />{t('files.preview')}</Button>}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -481,6 +484,13 @@ export default function FileVault() {
         </div>
       )}
 
+      {previewFile && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="file-preview-title" onClick={() => setPreviewFile(null)}>
+        <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-xl bg-[var(--color-bg)] p-4" onClick={(event) => event.stopPropagation()}>
+          <div className="mb-3 flex items-center justify-between gap-3"><h3 id="file-preview-title" className="truncate text-sm font-semibold">{previewFile.name}</h3><Button variant="ghost" size="sm" onClick={() => setPreviewFile(null)} aria-label={t('files.previewClose')}><X className="size-4" /></Button></div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewFile.preview_url!} alt={previewFile.name} className="mx-auto max-h-[75vh] object-contain" />
+        </div>
+      </div>}
       <ConfirmDialog
         isOpen={!!fileToDelete}
         title={t('files.deleteConfirmTitle')}

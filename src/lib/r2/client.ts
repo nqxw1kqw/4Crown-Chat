@@ -7,11 +7,26 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
+  type _Object,
   CompletedPart,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let cachedR2Client: S3Client | null = null;
+
+export async function listR2Objects(prefix: string): Promise<_Object[]> {
+  const objects: _Object[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const result = await getR2Client().send(new ListObjectsV2Command({
+      Bucket: getR2BucketName(), Prefix: prefix, ContinuationToken: continuationToken,
+    }));
+    objects.push(...(result.Contents ?? []));
+    continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+  } while (continuationToken);
+  return objects;
+}
 
 function requiredEnv(name: string): string {
   const value = process.env[name];

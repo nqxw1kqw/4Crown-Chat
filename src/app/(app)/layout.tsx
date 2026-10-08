@@ -1,6 +1,6 @@
 import { LocaleProvider } from '@/i18n/LocaleContext';
 import { ToastProvider } from '@/components/ui/Toast';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { AppDataProvider } from '@/components/providers/AppDataProvider';
 import AppGate from '@/components/app/AppGate';
 

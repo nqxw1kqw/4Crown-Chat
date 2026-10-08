@@ -45,12 +45,12 @@ import { useLocale } from '@/i18n/useLocale';
 import { TranslationKey } from '@/i18n/dictionaries/vi';
 import { cn } from '@/lib/utils';
 import { StatusBadge, PriorityBadge, TagBadge } from '@/components/common/badges';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/Input';
 import {
   Table,
   TableBody,

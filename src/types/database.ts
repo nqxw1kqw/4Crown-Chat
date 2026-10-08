@@ -81,6 +81,7 @@ export interface Task {
 }
 
 export interface FileRecord {
+  preview_url?: string | null;
   id: string;
   project_id: string;
   folder: string;

@@ -6,7 +6,7 @@ import { useLocale } from '@/i18n/useLocale';
 import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { ApiClientError } from '@/lib/api-client';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import { FieldInput } from '@/components/common/form';
 import MemberAvatar from '@/components/common/member-avatar';
 

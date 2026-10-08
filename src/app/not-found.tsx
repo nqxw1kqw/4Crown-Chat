@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Compass, House } from 'lucide-react';
 import { LocaleProvider } from '@/i18n/LocaleContext';
 import { useLocale } from '@/i18n/useLocale';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 
 function NotFoundContent() {
   const { t } = useLocale();

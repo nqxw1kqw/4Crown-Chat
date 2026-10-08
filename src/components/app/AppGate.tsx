@@ -18,7 +18,7 @@ export default function AppGate({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLanguageDone(hasStoredLocale()), 0);
+    const timer = setTimeout(() => { setLanguageDone(hasStoredLocale()); setLoaderDone(sessionStorage.getItem("4crown-boot-done") === "1"); }, 0);
     return () => clearTimeout(timer);
   }, []);
 
@@ -29,7 +29,7 @@ export default function AppGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!loaderDone) {
-    return <BootLoader bootDone={bootDone} onComplete={() => setLoaderDone(true)} />;
+    return <BootLoader bootDone={bootDone} onComplete={() => { sessionStorage.setItem("4crown-boot-done", "1"); setLoaderDone(true); }} />;
   }
 
   if (phase === 'error') {

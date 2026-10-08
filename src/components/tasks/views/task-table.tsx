@@ -4,7 +4,7 @@ import React from 'react';
 import { Check, MessageSquare, Paperclip } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip';
 import { PriorityBadge, StatusBadge, TagBadge } from '@/components/common/badges';
 import MemberAvatar from '@/components/common/member-avatar';
 import { useLocale } from '@/i18n/useLocale';

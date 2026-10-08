@@ -16,7 +16,7 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/Tooltip';
 import MemberAvatar, { MemberAvatarStack } from '@/components/common/member-avatar';
 import { RoleBadge } from '@/components/common/badges';
 import { useLocale } from '@/i18n/useLocale';

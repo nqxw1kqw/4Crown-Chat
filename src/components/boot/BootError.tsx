@@ -4,8 +4,8 @@ import React from 'react';
 import { TriangleAlert, RotateCw } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { useAppData } from '@/components/providers/AppDataProvider';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 
 export default function BootError({ onRetry }: { onRetry: () => void }) {
   const { t } = useLocale();

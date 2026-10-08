@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { AlertCircle, ArrowDown, ArrowUp, Check, Clock, Minus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/Badge';
 import { TASK_STATUS_CONFIG, TASK_TAG_COLORS, type TaskTag } from '@/lib/constants';
 import { useLocale } from '@/i18n/useLocale';
 import type { TranslationKey } from '@/i18n/dictionaries/vi';

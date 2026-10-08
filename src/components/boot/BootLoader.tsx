@@ -16,7 +16,7 @@ interface BootLoaderProps {
  * khiến progress kẹt ở 0% vĩnh viễn. Đồng hồ ở đây chạy bằng setInterval
  * trên mốc thời gian tuyệt đối nên vẫn tới đích dù tab không hiển thị.
  */
-export default function BootLoader({ bootDone, onComplete, minDurationMs = 1600 }: BootLoaderProps) {
+export default function BootLoader({ bootDone, onComplete, minDurationMs = 300 }: BootLoaderProps) {
   const { t, formatNumber } = useLocale();
   const [elapsed, setElapsed] = useState(0);
   const completedRef = useRef(false);
@@ -67,9 +67,6 @@ export default function BootLoader({ bootDone, onComplete, minDurationMs = 1600 
             <h1 className="text-xl font-semibold tracking-tight text-[var(--color-text)]">
               {t('nav.brand')}
             </h1>
-            <span className="mt-1 inline-block rounded bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-brand-hover)]">
-              {t('nav.version')}
-            </span>
           </div>
         </div>
 

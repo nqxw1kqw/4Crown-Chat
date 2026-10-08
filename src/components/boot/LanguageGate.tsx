@@ -4,7 +4,7 @@ import React from 'react';
 import { Gamepad2, ArrowRight, Check } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { Locale } from '@/i18n/config';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 
 interface LanguageGateProps {
   onContinue: () => void;

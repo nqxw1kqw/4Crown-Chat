@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { syncR2Objects } from '@/lib/r2/sync';
 import { isSlotId, PROJECT_ID } from '@/lib/constants';
 import { ApiError, dbError } from '@/lib/api';
 import { assertProjectKey, getPresignedVideoGetUrl } from '@/lib/r2/client';
@@ -99,6 +100,7 @@ export async function listTasks(): Promise<Task[]> {
 }
 
 export async function listVideos(): Promise<GameplayVideo[]> {
+  await syncR2Objects();
   const { data, error } = await db()
     .from('gameplay_videos')
     .select('*')
@@ -126,6 +128,7 @@ export async function listVideos(): Promise<GameplayVideo[]> {
 }
 
 export async function listFiles(): Promise<FileRecord[]> {
+  await syncR2Objects();
   const { data, error } = await db()
     .from('files')
     .select('*')
@@ -133,7 +136,11 @@ export async function listFiles(): Promise<FileRecord[]> {
     .order('created_at', { ascending: false });
 
   if (error) throw dbError(error);
-  return (data ?? []) as FileRecord[];
+  return Promise.all(((data ?? []) as FileRecord[]).map(async (file) => {
+    if (!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)) return file;
+    try { return { ...file, preview_url: await getPresignedVideoGetUrl(assertProjectKey(file.file_key, PROJECT_ID), THUMBNAIL_TTL_SECONDS) }; }
+    catch { return file; }
+  }));
 }
 
 export async function countComments(taskIds: string[]): Promise<Record<string, number>> {

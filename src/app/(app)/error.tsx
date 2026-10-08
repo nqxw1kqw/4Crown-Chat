@@ -4,7 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { TriangleAlert, RotateCw } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 
 export default function AppError({
   error,

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import {
   Dialog,
   DialogContent,

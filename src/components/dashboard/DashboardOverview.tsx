@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { GithubIcon } from '@/components/ui/GithubIcon';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -15,8 +16,8 @@ import {
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { useLocale } from '@/i18n/useLocale';
 import { PriorityBadge, StatusBadge, TagBadge } from '@/components/common/badges';
@@ -169,6 +170,10 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-5">
+      <Card className="flex flex-row flex-wrap items-center justify-between gap-3 p-4">
+        <div><p className="text-sm font-semibold">Just-a-Fish-Game</p><p className="text-xs text-[var(--color-text-muted)]">{t('dashboard.githubDesc')}</p></div>
+        <Button asChild variant="outline" size="sm"><a href="https://github.com/nqxw1kqw/Just-a-Fish-Game" target="_blank" rel="noopener noreferrer" aria-label={t('dashboard.githubAria')}><GithubIcon className="size-4" />{t('dashboard.githubOpen')}</a></Button>
+      </Card>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold tracking-tight text-[var(--color-text)]">{t('dashboard.greeting', { name: myName })}</h1>
