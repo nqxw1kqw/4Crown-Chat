@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
 import { GameplayVideo, ProjectRole } from '@/types/database';
 import { formatBytes, formatDuration, formatDate } from '@/lib/utils';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface VideoPlayerModalProps {
   video: GameplayVideo;
@@ -21,7 +22,19 @@ export default function VideoPlayerModal({
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Bắt phím Esc để đóng modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showDeleteConfirm) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, showDeleteConfirm]);
 
   // Kiểm tra đuôi file xem có phải định dạng kén trình duyệt không
   const isPotentiallyIncompatible =
@@ -84,7 +97,12 @@ export default function VideoPlayerModal({
   const canDelete = userRole === 'OWNER' || userRole === 'ADMIN';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="video-player-modal-title"
+    >
       <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border border-zinc-800 bg-[#11131c] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
@@ -92,10 +110,14 @@ export default function VideoPlayerModal({
             <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-xs font-mono font-bold text-indigo-400">
               {video.version}
             </span>
-            <h3 className="text-base font-bold text-white truncate">{video.title}</h3>
+            <h3 id="video-player-modal-title" className="text-base font-bold text-white truncate">
+              {video.title}
+            </h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Đóng trình phát video"
             className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
@@ -121,6 +143,9 @@ export default function VideoPlayerModal({
               controls
               autoPlay
               playsInline
+              preload="none"
+              title={video.title}
+              aria-label={`Trình phát video ${video.title}`}
               className="w-full h-full object-contain"
               onError={() => {
                 setErrorMsg('Không thể phát video. Link có thể đã hết hạn hoặc định dạng video chưa được hỗ trợ.');
@@ -174,6 +199,7 @@ export default function VideoPlayerModal({
           {/* Action Row */}
           <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
             <button
+              type="button"
               onClick={fetchSignedUrl}
               className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
             >
@@ -182,20 +208,35 @@ export default function VideoPlayerModal({
 
             {canDelete && onDeleteVideo && (
               <button
-                onClick={() => {
-                  if (confirm('Bạn có chắc muốn xóa video gameplay này không?')) {
-                    onDeleteVideo(video.id);
-                    onClose();
-                  }
-                }}
-                className="text-xs text-rose-400 hover:text-rose-300 transition-colors"
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition-colors px-2.5 py-1 rounded-lg hover:bg-rose-500/10"
               >
-                Xóa video
+                <Trash2 className="h-3.5 w-3.5" /> Xóa video
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* ConfirmDialog khi xóa video */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Xác nhận xóa video gameplay"
+        description="Video này sẽ bị gỡ bỏ vĩnh viễn khỏi Cloudflare R2 và danh sách kiểm thử gameplay."
+        targetName={`"${video.title}" (${video.version})`}
+        confirmLabel="Xóa video"
+        cancelLabel="Hủy bỏ"
+        isDangerous={true}
+        onConfirm={() => {
+          if (onDeleteVideo) {
+            onDeleteVideo(video.id);
+            setShowDeleteConfirm(false);
+            onClose();
+          }
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

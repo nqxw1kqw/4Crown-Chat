@@ -2,7 +2,6 @@
 
 import React from 'react';
 import {
-  CheckCircle2,
   Clock,
   AlertTriangle,
   Video,
@@ -22,7 +21,7 @@ interface DashboardOverviewProps {
   videos: GameplayVideo[];
   files: FileRecord[];
   currentUserId: string;
-  userRole: ProjectRole;
+  userRole?: ProjectRole;
   onSelectTask: (task: Task) => void;
   onSelectVideo: (video: GameplayVideo) => void;
   onNavigateTab: (tab: string) => void;
@@ -33,7 +32,6 @@ export default function DashboardOverview({
   videos,
   files,
   currentUserId,
-  userRole,
   onSelectTask,
   onSelectVideo,
   onNavigateTab,
@@ -78,15 +76,25 @@ export default function DashboardOverview({
             </div>
           </div>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-white tracking-tight">{progressPercent}%</span>
-            <span className="text-xs text-zinc-400">({doneTasks}/{totalTasks} task)</span>
+            {totalTasks === 0 ? (
+              <span className="text-xl font-bold text-zinc-300">Chưa có task nào</span>
+            ) : (
+              <>
+                <span className="text-3xl font-extrabold text-white tracking-tight">{progressPercent}%</span>
+                <span className="text-xs text-zinc-300">({doneTasks}/{totalTasks} task)</span>
+              </>
+            )}
           </div>
-          <div className="mt-3 w-full bg-zinc-800/80 rounded-full h-2 overflow-hidden">
-            <div
-              className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
+          {totalTasks > 0 ? (
+            <div className="mt-3 w-full bg-zinc-800/80 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-zinc-400">Bắt đầu bằng cách tạo task đầu tiên</p>
+          )}
         </div>
 
         {/* Card 2: Task đang làm */}
@@ -213,11 +221,18 @@ export default function DashboardOverview({
             </div>
 
             {tasks.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">
-                Chưa có task nào trong dự án. Bấm &quot;Xem Taskboard&quot; để tạo task đầu tiên!
+              <div className="text-center py-8 space-y-3">
+                <p className="text-zinc-400 text-xs">Chưa có task nào trong dự án.</p>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('tasks')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                >
+                  Tạo task đầu tiên
+                </button>
               </div>
             ) : myTasks.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">
+              <div className="text-center py-8 text-zinc-400 text-xs">
                 Tuyệt vời! Bạn không còn task nào dang dở.
               </div>
             ) : (
@@ -272,8 +287,15 @@ export default function DashboardOverview({
             </div>
 
             {latestVideos.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">
-                Chưa có video gameplay nào được tải lên.
+              <div className="text-center py-8 space-y-3">
+                <p className="text-zinc-400 text-xs">Chưa có video gameplay nào được tải lên.</p>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('videos')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                >
+                  Tải video lên
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -288,6 +310,7 @@ export default function DashboardOverview({
                         <img
                           src={video.thumbnail_key}
                           alt={video.title}
+                          loading="lazy"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
                       ) : (
@@ -340,8 +363,15 @@ export default function DashboardOverview({
             </div>
 
             {latestFiles.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">
-                Chưa có file nào trong kho.
+              <div className="text-center py-8 space-y-3">
+                <p className="text-zinc-400 text-xs">Chưa có file nào trong kho.</p>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('files')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors"
+                >
+                  Tải file lên
+                </button>
               </div>
             ) : (
               <div className="space-y-2">

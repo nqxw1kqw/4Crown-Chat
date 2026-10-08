@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Video,
   Upload,
@@ -9,10 +9,21 @@ import {
   AlertTriangle,
   X,
   FileVideo,
+  RefreshCw,
+  Clock,
+  Zap,
 } from 'lucide-react';
 import { GameplayVideo, ProjectRole } from '@/types/database';
 import { formatBytes, formatDuration, formatDate } from '@/lib/utils';
-import { extractVideoMetadata, uploadLargeFileToR2, UploadProgress } from '@/lib/upload/client-uploader';
+import {
+  extractVideoMetadata,
+  uploadLargeFileToR2,
+  UploadProgress,
+  validateUploadFile,
+  isKénTrìnhDuyệtFormat,
+} from '@/lib/upload/client-uploader';
+import { useToast } from '@/components/ui/Toast';
+import { canUpload as canUserUpload, getRoleRestrictionMessage } from '@/lib/permissions';
 import VideoPlayerModal from './VideoPlayerModal';
 
 interface VideoGalleryProps {
@@ -36,6 +47,7 @@ export default function VideoGallery({
   selectedVideo,
   onClearSelectedVideo,
 }: VideoGalleryProps) {
+  const { success, error: toastError, warning } = useToast();
   const [activeVideo, setActiveVideo] = useState<GameplayVideo | null>(selectedVideo || null);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
@@ -51,13 +63,45 @@ export default function VideoGallery({
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const canUpload = userRole !== 'VIEWER';
+  const canUpload = canUserUpload(userRole);
 
-  // Khi chọn file video: client lập tức trích xuất thumbnail & duration
+  const resetUploadForm = useCallback(() => {
+    setSelectedFile(null);
+    setPreviewThumbnail(null);
+    setExtractedDuration(0);
+    setVideoTitle('');
+    setVideoVersion('v1.0.0');
+    setVideoDescription('');
+    setUploadProgress(null);
+    setUploadError(null);
+  }, []);
+
+  // Bắt phím Esc để đóng modal tải lên (chỉ khi không đang upload)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showUploadModal && uploadProgress?.status !== 'uploading') {
+        setShowUploadModal(false);
+        resetUploadForm();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showUploadModal, uploadProgress?.status, resetUploadForm]);
+
+  // Khi chọn file video: validate và trích xuất thumbnail & duration an toàn
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate kích thước tối đa 5GB và định dạng
+    const validation = validateUploadFile(file, 'video', 5 * 1024 * 1024 * 1024);
+    if (!validation.valid) {
+      setUploadError(validation.error || 'Tập tin không hợp lệ');
+      setSelectedFile(null);
+      return;
+    }
 
     setSelectedFile(file);
     setVideoTitle(file.name.replace(/\.[^/.]+$/, ''));
@@ -77,14 +121,15 @@ export default function VideoGallery({
     }
   };
 
-  const handleStartUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleStartUpload = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedFile) return;
 
     setUploadError(null);
+    abortControllerRef.current = new AbortController();
 
     try {
-      // Bắt đầu quá trình upload Multipart R2
+      // Bắt đầu upload Multipart lên Cloudflare R2
       await uploadLargeFileToR2({
         projectId,
         file: selectedFile,
@@ -95,10 +140,11 @@ export default function VideoGallery({
           description: videoDescription.trim(),
           duration: extractedDuration,
         },
+        signal: abortControllerRef.current.signal,
         onProgress: (p) => setUploadProgress(p),
       });
 
-      // Tạo object mới cập nhật vào state hiển thị ngay
+      // Tạo object gameplay video mới hiển thị ngay
       const newVideoObj: GameplayVideo = {
         id: `vid-${crypto.randomUUID()}`,
         project_id: projectId,
@@ -114,22 +160,40 @@ export default function VideoGallery({
       };
 
       onAddVideo(newVideoObj);
+      success('Tải lên thành công', `Video "${videoTitle.trim()}" đã được lưu an toàn trên R2.`);
       setShowUploadModal(false);
       resetUploadForm();
     } catch (err: unknown) {
+      if (abortControllerRef.current?.signal.aborted) {
+        warning('Đã hủy tải lên', 'Quá trình upload video đã được hủy bỏ.');
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Tải lên thất bại';
-      // Trong môi trường demo nếu R2 chưa có secret key, hỗ trợ mock upload để trải nghiệm
+      // Môi trường dev fallback nếu R2 chưa có secret
       if (msg.includes('dummy') || msg.includes('Failed') || msg.includes('credentials')) {
         simulateMockUpload();
       } else {
         setUploadError(msg);
+        toastError('Lỗi tải lên', msg);
       }
+    }
+  };
+
+  const handleAbortUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setUploadProgress((prev) => (prev ? { ...prev, status: 'aborted' } : null));
+      warning('Đã hủy tải lên', 'Bạn đã dừng tải video.');
     }
   };
 
   const simulateMockUpload = () => {
     let p = 0;
     const interval = setInterval(() => {
+      if (abortControllerRef.current?.signal.aborted) {
+        clearInterval(interval);
+        return;
+      }
       p += 20;
       setUploadProgress({
         uploadedBytes: (selectedFile!.size * p) / 100,
@@ -137,6 +201,8 @@ export default function VideoGallery({
         percentage: p,
         currentPart: Math.ceil(p / 25),
         totalParts: 4,
+        speedBytesPerSec: 15 * 1024 * 1024,
+        remainingSeconds: (100 - p) / 20,
         status: p >= 100 ? 'done' : 'uploading',
       });
 
@@ -150,30 +216,24 @@ export default function VideoGallery({
             title: videoTitle.trim(),
             description: videoDescription.trim(),
             file_key: selectedFile!.name,
-            thumbnail_key: previewThumbnail || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
+            thumbnail_key:
+              previewThumbnail ||
+              'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
             duration: extractedDuration || 120,
             size: selectedFile!.size,
             uploaded_by: currentUserId,
             created_at: new Date().toISOString(),
           };
           onAddVideo(newVideoObj);
+          success('Tải lên hoàn tất', `Video "${videoTitle.trim()}" đã sẵn sàng.`);
           setShowUploadModal(false);
           resetUploadForm();
         }, 500);
       }
-    }, 250);
+    }, 300);
   };
 
-  const resetUploadForm = () => {
-    setSelectedFile(null);
-    setPreviewThumbnail(null);
-    setExtractedDuration(0);
-    setVideoTitle('');
-    setVideoVersion('v1.0.0');
-    setVideoDescription('');
-    setUploadProgress(null);
-    setUploadError(null);
-  };
+  const isSelectedFileKen = selectedFile ? isKénTrìnhDuyệtFormat(selectedFile.name) : false;
 
   return (
     <div className="space-y-6">
@@ -190,13 +250,17 @@ export default function VideoGallery({
 
         {canUpload ? (
           <button
+            type="button"
             onClick={() => setShowUploadModal(true)}
             className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
           >
             <Upload className="h-4 w-4" /> Tải lên Video Gameplay
           </button>
         ) : (
-          <div className="text-xs text-zinc-500 italic py-2 px-3 border border-zinc-800 rounded-xl bg-[#12141d]">
+          <div
+            title={getRoleRestrictionMessage('tải lên video', userRole)}
+            className="text-xs text-zinc-400 italic py-2 px-3 border border-zinc-800 rounded-xl bg-[#12141d]"
+          >
             Vai trò VIEWER không có quyền tải lên video
           </div>
         )}
@@ -207,11 +271,12 @@ export default function VideoGallery({
         <div className="rounded-2xl border border-[#1f2330] bg-[#12141d] p-12 text-center">
           <FileVideo className="h-12 w-12 mx-auto text-zinc-600 mb-3" />
           <h3 className="text-sm font-semibold text-zinc-300">Chưa có video gameplay nào</h3>
-          <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
             Tải lên clip test gameplay từ 60fps, hỗ trợ file nặng tới 5GB trực tiếp lên Cloudflare R2 private bucket.
           </p>
           {canUpload && (
             <button
+              type="button"
               onClick={() => setShowUploadModal(true)}
               className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
             >
@@ -233,6 +298,7 @@ export default function VideoGallery({
                   <img
                     src={vid.thumbnail_key}
                     alt={vid.title}
+                    loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
@@ -297,17 +363,26 @@ export default function VideoGallery({
 
       {/* Upload Modal (Section 4 & 5) */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-xl rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-video-modal-title"
+        >
+          <div className="relative w-full max-w-xl rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-4">
-              <h3 className="text-base font-bold text-white">Tải lên Video Gameplay (R2 Multipart)</h3>
+              <h3 id="upload-video-modal-title" className="text-base font-bold text-white">
+                Tải lên Video Gameplay (R2 Multipart)
+              </h3>
               <button
+                type="button"
                 onClick={() => {
-                  if (!uploadProgress || uploadProgress.status === 'done' || uploadProgress.status === 'error') {
+                  if (!uploadProgress || uploadProgress.status !== 'uploading') {
                     setShowUploadModal(false);
                     resetUploadForm();
                   }
                 }}
+                aria-label="Đóng cửa sổ tải lên"
                 className="text-zinc-400 hover:text-white"
               >
                 <X className="h-5 w-5" />
@@ -325,7 +400,7 @@ export default function VideoGallery({
                   <p className="text-xs font-semibold text-zinc-200">
                     Bấm để chọn file video từ máy tính
                   </p>
-                  <p className="text-[11px] text-zinc-500 mt-1">
+                  <p className="text-[11px] text-zinc-400 mt-1">
                     Hỗ trợ MP4 (khuyến nghị), MOV, MKV, WEBM (Tối đa 5GB)
                   </p>
                   <input
@@ -337,41 +412,58 @@ export default function VideoGallery({
                   />
                 </div>
               ) : (
-                <div className="rounded-xl border border-zinc-800 bg-[#171924] p-4 flex gap-4 items-center">
-                  {/* Thumbnail Preview Extracted by Canvas */}
-                  <div className="w-28 aspect-video bg-black rounded-lg overflow-hidden shrink-0 relative">
-                    {previewThumbnail ? (
-                      <img src={previewThumbnail} alt="Thumbnail preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">
-                        {isProcessingFile ? 'Đang tạo...' : 'Không có thumb'}
-                      </div>
-                    )}
-                    {extractedDuration > 0 && (
-                      <span className="absolute bottom-1 right-1 bg-black/80 px-1 py-0.2 rounded text-[9px] font-mono text-zinc-300">
-                        {formatDuration(extractedDuration)}
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-zinc-800 bg-[#171924] p-4 flex gap-4 items-center">
+                    {/* Thumbnail Preview */}
+                    <div className="w-28 aspect-video bg-black rounded-lg overflow-hidden shrink-0 relative">
+                      {previewThumbnail ? (
+                        <img
+                          src={previewThumbnail}
+                          alt="Thumbnail preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">
+                          {isProcessingFile ? 'Đang tạo...' : 'Không có thumb'}
+                        </div>
+                      )}
+                      {extractedDuration > 0 && (
+                        <span className="absolute bottom-1 right-1 bg-black/80 px-1 py-0.2 rounded text-[9px] font-mono text-zinc-300">
+                          {formatDuration(extractedDuration)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">{selectedFile.name}</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {formatBytes(selectedFile.size)} • {formatDuration(extractedDuration)}
+                      </p>
+                      <span className="inline-block mt-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                        Đã trích xuất Thumbnail an toàn từ client
                       </span>
+                    </div>
+
+                    {uploadProgress?.status !== 'uploading' && (
+                      <button
+                        type="button"
+                        onClick={() => resetUploadForm()}
+                        aria-label="Hủy chọn file này"
+                        className="text-zinc-500 hover:text-rose-400 p-1"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     )}
                   </div>
 
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-white truncate">{selectedFile.name}</p>
-                    <p className="text-[11px] text-zinc-400 mt-0.5">
-                      {formatBytes(selectedFile.size)} • {formatDuration(extractedDuration)}
-                    </p>
-                    <span className="inline-block mt-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                      Đã trích xuất Thumbnail từ client
-                    </span>
-                  </div>
-
-                  {!uploadProgress && (
-                    <button
-                      type="button"
-                      onClick={() => resetUploadForm()}
-                      className="text-zinc-500 hover:text-rose-400 p-1"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                  {/* Badge cảnh báo định dạng kén trình duyệt */}
+                  {isSelectedFileKen && (
+                    <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-300 px-3 py-2 rounded-xl text-xs">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                      <span>
+                        Cảnh báo: Định dạng .{selectedFile.name.split('.').pop()} có thể không phát được trực tiếp trên một số trình duyệt (khuyến nghị MP4 H.264).
+                      </span>
+                    </div>
                   )}
                 </div>
               )}
@@ -414,15 +506,18 @@ export default function VideoGallery({
                 />
               </div>
 
-              {/* Progress Bar (Section 4) */}
+              {/* Progress Bar với tốc độ và ETA */}
               {uploadProgress && (
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4 space-y-2">
+                <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4 space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-indigo-300">
                       {uploadProgress.status === 'initializing' && 'Đang khởi tạo Multipart trên R2...'}
-                      {uploadProgress.status === 'uploading' && `Đang upload part ${uploadProgress.currentPart}/${uploadProgress.totalParts}...`}
+                      {uploadProgress.status === 'uploading' &&
+                        `Đang tải part ${uploadProgress.currentPart}/${uploadProgress.totalParts}...`}
                       {uploadProgress.status === 'completing' && 'Đang hoàn tất và lưu metadata...'}
                       {uploadProgress.status === 'done' && 'Upload hoàn tất thành công!'}
+                      {uploadProgress.status === 'aborted' && 'Đã hủy tải lên.'}
+                      {uploadProgress.status === 'error' && 'Lỗi trong quá trình upload.'}
                     </span>
                     <span className="font-mono font-bold text-white">{uploadProgress.percentage}%</span>
                   </div>
@@ -433,40 +528,82 @@ export default function VideoGallery({
                       style={{ width: `${uploadProgress.percentage}%` }}
                     />
                   </div>
-                  <div className="text-[11px] text-zinc-400">
-                    Đã tải: {formatBytes(uploadProgress.uploadedBytes)} / {formatBytes(uploadProgress.totalBytes)}
+
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>
+                      Đã tải: {formatBytes(uploadProgress.uploadedBytes)} / {formatBytes(uploadProgress.totalBytes)}
+                    </span>
+                    {uploadProgress.status === 'uploading' && (
+                      <div className="flex items-center gap-3">
+                        {uploadProgress.speedBytesPerSec !== undefined && uploadProgress.speedBytesPerSec > 0 && (
+                          <span className="flex items-center gap-1 text-indigo-300 font-mono">
+                            <Zap className="h-3 w-3 text-amber-400" />
+                            {formatBytes(uploadProgress.speedBytesPerSec)}/s
+                          </span>
+                        )}
+                        {uploadProgress.remainingSeconds !== undefined && (
+                          <span className="flex items-center gap-1 text-zinc-300 font-mono">
+                            <Clock className="h-3 w-3 text-indigo-400" />
+                            Còn ~{Math.ceil(uploadProgress.remainingSeconds)}s
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Error message */}
               {uploadError && (
-                <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span>{uploadError}</span>
+                <div className="flex items-center justify-between text-xs text-rose-400 bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartUpload()}
+                    className="flex items-center gap-1 text-rose-300 hover:text-white font-medium underline underline-offset-2 ml-2 shrink-0"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> Thử lại
+                  </button>
                 </div>
               )}
 
               {/* Buttons */}
-              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-800/80">
-                <button
-                  type="button"
-                  disabled={uploadProgress?.status === 'uploading'}
-                  onClick={() => {
-                    setShowUploadModal(false);
-                    resetUploadForm();
-                  }}
-                  className="rounded-xl px-4 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-50"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={!selectedFile || uploadProgress?.status === 'uploading'}
-                  className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50"
-                >
-                  <Upload className="h-4 w-4" /> Bắt đầu tải lên
-                </button>
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
+                {uploadProgress?.status === 'uploading' ? (
+                  <button
+                    type="button"
+                    onClick={handleAbortUpload}
+                    className="rounded-xl px-4 py-2 text-xs font-semibold text-rose-400 border border-rose-500/40 hover:bg-rose-500/10 transition-colors"
+                  >
+                    Hủy tải lên
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    disabled={uploadProgress?.status === 'uploading'}
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      resetUploadForm();
+                    }}
+                    className="rounded-xl px-4 py-2 text-xs font-medium text-zinc-400 hover:bg-zinc-800 hover:text-white disabled:opacity-50"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!selectedFile || uploadProgress?.status === 'uploading'}
+                    className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50"
+                  >
+                    <Upload className="h-4 w-4" /> Bắt đầu tải lên
+                  </button>
+                </div>
               </div>
             </form>
           </div>

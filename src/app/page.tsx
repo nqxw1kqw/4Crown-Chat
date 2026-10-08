@@ -7,13 +7,9 @@ import TaskList from '@/components/tasks/TaskList';
 import VideoGallery from '@/components/videos/VideoGallery';
 import FileVault from '@/components/files/FileVault';
 import MemberManagement from '@/components/members/MemberManagement';
+import { ToastProvider } from '@/components/ui/Toast';
 import {
   MOCK_CURRENT_USER,
-  MOCK_PROJECTS,
-  MOCK_MEMBERS,
-  MOCK_TASKS,
-  MOCK_VIDEOS,
-  MOCK_FILES,
 } from '@/lib/mock-data';
 import { Task, GameplayVideo, FileRecord, ProjectRole, ProjectMember, Profile } from '@/types/database';
 
@@ -121,22 +117,23 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col selection:bg-indigo-500 selection:text-white">
-      {/* Top Navbar */}
-      <Navbar
-        currentTab={currentTab}
-        onTabChange={(tab) => {
-          setCurrentTab(tab);
-          setSelectedTaskId(null);
-          setSelectedVideo(null);
-        }}
-        currentRole={currentRole}
-        onRoleChange={(role) => setCurrentRole(role)}
-        projectName={currentProject.name}
-      />
+    <ToastProvider>
+      <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col selection:bg-indigo-500 selection:text-white">
+        {/* Top Navbar */}
+        <Navbar
+          currentTab={currentTab}
+          onTabChange={(tab) => {
+            setCurrentTab(tab);
+            setSelectedTaskId(null);
+            setSelectedVideo(null);
+          }}
+          currentRole={currentRole}
+          onRoleChange={(role) => setCurrentRole(role)}
+          projectName={currentProject.name}
+        />
 
-      {/* Main Container */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">
         {currentTab === 'dashboard' && (
           <DashboardOverview
             tasks={tasks}
@@ -207,5 +204,6 @@ export default function Home() {
         )}
       </main>
     </div>
+  </ToastProvider>
   );
 }

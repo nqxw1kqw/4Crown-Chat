@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Shield,
@@ -8,9 +8,12 @@ import {
   UserPlus,
   Trash2,
   Crown,
-  Check,
+  X,
 } from 'lucide-react';
 import { ProjectMember, Profile, ProjectRole } from '@/types/database';
+import { canManageMembers, getRoleRestrictionMessage } from '@/lib/permissions';
+import { useToast } from '@/components/ui/Toast';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface MemberManagementProps {
   members: (ProjectMember & { profile: Profile })[];
@@ -59,19 +62,48 @@ export default function MemberManagement({
   onRemoveMember,
   onAddMember,
 }: MemberManagementProps) {
+  const { success, error: toastError } = useToast();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<ProjectRole>('MEMBER');
+  const [memberToRemove, setMemberToRemove] = useState<(ProjectMember & { profile: Profile }) | null>(null);
 
-  const canManageMembers = userRole === 'OWNER' || userRole === 'ADMIN';
+  const canManage = canManageMembers(userRole);
+
+  // Bắt phím Esc để đóng modal thêm thành viên
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showAddModal) {
+        setShowAddModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAddModal]);
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberName.trim()) return;
+
+    if (!canManage) {
+      toastError('Không có quyền', getRoleRestrictionMessage('thêm thành viên', userRole));
+      return;
+    }
+
     onAddMember(newMemberName.trim(), newMemberRole);
+    success('Thêm thành viên thành công', `Đã mời "${newMemberName.trim()}" với vai trò ${newMemberRole}`);
     setNewMemberName('');
     setNewMemberRole('MEMBER');
     setShowAddModal(false);
+  };
+
+  const handleRoleChange = (member: ProjectMember & { profile: Profile }, newRole: ProjectRole) => {
+    if (!canManage) {
+      toastError('Không có quyền', getRoleRestrictionMessage('thay đổi vai trò', userRole));
+      return;
+    }
+    onUpdateRole(member.user_id, newRole);
+    success('Đã cập nhật vai trò', `${member.profile.display_name} hiện là ${newRole}`);
   };
 
   return (
@@ -87,13 +119,21 @@ export default function MemberManagement({
           </p>
         </div>
 
-        {canManageMembers && (
+        {canManage ? (
           <button
+            type="button"
             onClick={() => setShowAddModal(true)}
             className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
           >
             <UserPlus className="h-4 w-4" /> Thêm Thành viên
           </button>
+        ) : (
+          <div
+            title={getRoleRestrictionMessage('quản lý thành viên', userRole)}
+            className="text-xs text-zinc-400 italic py-2 px-3 border border-zinc-800 rounded-xl bg-[#12141d]"
+          >
+            Chỉ OWNER và ADMIN mới có quyền quản lý thành viên
+          </div>
         )}
       </div>
 
@@ -101,7 +141,6 @@ export default function MemberManagement({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {(Object.keys(ROLE_DEFINITIONS) as ProjectRole[]).map((r) => {
           const info = ROLE_DEFINITIONS[r];
-          const Icon = info.icon;
           return (
             <div
               key={r}
@@ -134,7 +173,7 @@ export default function MemberManagement({
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-white text-sm overflow-hidden border border-zinc-700">
                     {m.profile.avatar_url ? (
-                      <img src={m.profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                      <img src={m.profile.avatar_url} alt={m.profile.display_name} className="h-full w-full object-cover" />
                     ) : (
                       m.profile.display_name.charAt(0)
                     )}
@@ -149,15 +188,16 @@ export default function MemberManagement({
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-zinc-500">ID: {m.user_id}</span>
+                    <span className="text-xs text-zinc-400">ID: {m.user_id}</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {canManageMembers && !isOwner ? (
+                  {canManage && !isOwner ? (
                     <select
                       value={m.role}
-                      onChange={(e) => onUpdateRole(m.user_id, e.target.value as ProjectRole)}
+                      onChange={(e) => handleRoleChange(m, e.target.value as ProjectRole)}
+                      aria-label={`Thay đổi vai trò cho ${m.profile.display_name}`}
                       className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
                     >
                       {(['ADMIN', 'MEMBER', 'VIEWER'] as ProjectRole[]).map((r) => (
@@ -172,14 +212,12 @@ export default function MemberManagement({
                     </span>
                   )}
 
-                  {canManageMembers && !isOwner && !isMe && (
+                  {canManage && !isOwner && !isMe && (
                     <button
-                      onClick={() => {
-                        if (confirm(`Bạn có chắc muốn xóa ${m.profile.display_name} khỏi dự án?`)) {
-                          onRemoveMember(m.user_id);
-                        }
-                      }}
-                      className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 transition-colors"
+                      type="button"
+                      onClick={() => setMemberToRemove(m)}
+                      className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/20 transition-colors"
+                      aria-label={`Xóa thành viên ${m.profile.display_name} khỏi dự án`}
                       title="Xóa khỏi dự án"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -194,9 +232,26 @@ export default function MemberManagement({
 
       {/* Add Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-4">Thêm Thành viên mới</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-member-modal-title"
+        >
+          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-[#12141e] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 mb-4">
+              <h3 id="add-member-modal-title" className="text-base font-bold text-white">
+                Thêm Thành viên mới
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                aria-label="Đóng cửa sổ thêm thành viên"
+                className="text-zinc-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleAddSubmit} className="space-y-4">
               <div>
@@ -234,7 +289,7 @@ export default function MemberManagement({
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
                 >
                   Thêm vào Team
                 </button>
@@ -242,6 +297,25 @@ export default function MemberManagement({
             </form>
           </div>
         </div>
+      )}
+
+      {/* ConfirmDialog khi xóa thành viên */}
+      {memberToRemove && (
+        <ConfirmDialog
+          isOpen={!!memberToRemove}
+          title="Xác nhận xóa thành viên"
+          description="Thành viên này sẽ bị tước toàn bộ quyền truy cập vào dự án."
+          targetName={`"${memberToRemove.profile.display_name}" (${memberToRemove.role})`}
+          confirmLabel="Xóa khỏi dự án"
+          cancelLabel="Hủy bỏ"
+          isDangerous={true}
+          onConfirm={() => {
+            onRemoveMember(memberToRemove.user_id);
+            success('Đã xóa thành viên', `Đã xóa ${memberToRemove.profile.display_name} khỏi dự án.`);
+            setMemberToRemove(null);
+          }}
+          onCancel={() => setMemberToRemove(null)}
+        />
       )}
     </div>
   );

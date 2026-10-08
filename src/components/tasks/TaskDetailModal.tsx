@@ -1,22 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Calendar,
-  User,
   CheckSquare,
   Square,
   Plus,
   Trash2,
-  Paperclip,
-  Clock,
   AlertCircle,
   Percent,
 } from 'lucide-react';
 import { Task, TaskChecklistItem, ProjectRole, Profile, TaskStatus, TaskPriority } from '@/types/database';
 import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { getRoleRestrictionMessage } from '@/lib/permissions';
 
 interface TaskDetailModalProps {
   task: Task;
@@ -54,6 +53,17 @@ export default function TaskDetailModal({
   const [progress, setProgress] = useState<number>(task.progress);
   const [checklist, setChecklist] = useState<TaskChecklistItem[]>(task.checklist || []);
   const [newChecklistLabel, setNewChecklistLabel] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showDeleteConfirm) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, showDeleteConfirm]);
 
   // Toggle checklist item
   const handleToggleChecklist = (itemId: string) => {
@@ -105,7 +115,12 @@ export default function TaskDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-detail-modal-title"
+    >
       <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-zinc-800 bg-[#12141e] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800/80 px-6 py-4">
@@ -120,12 +135,17 @@ export default function TaskDetailModal({
 
           <div className="flex items-center gap-2">
             {!canEdit && (
-              <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+              <span
+                className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1"
+                title={getRoleRestrictionMessage('chỉnh sửa task', userRole)}
+              >
                 <AlertCircle className="h-3 w-3" /> Chỉ xem (VIEWER)
               </span>
             )}
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Đóng chi tiết task"
               className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
             >
               <X className="h-5 w-5" />
@@ -139,6 +159,7 @@ export default function TaskDetailModal({
           <div>
             {canEdit ? (
               <input
+                id="task-detail-modal-title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -147,7 +168,7 @@ export default function TaskDetailModal({
                 placeholder="Tiêu đề task..."
               />
             ) : (
-              <h2 className="text-lg font-bold text-white">{task.title}</h2>
+              <h2 id="task-detail-modal-title" className="text-lg font-bold text-white">{task.title}</h2>
             )}
           </div>
 
@@ -340,13 +361,8 @@ export default function TaskDetailModal({
             {canEdit && onDeleteTask && (userRole === 'OWNER' || userRole === 'ADMIN') && (
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm('Bạn có chắc muốn xóa task này không?')) {
-                    onDeleteTask(task.id);
-                    onClose();
-                  }
-                }}
-                className="text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-rose-400 hover:text-rose-300 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-rose-500/10"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Xóa task
               </button>
@@ -354,6 +370,25 @@ export default function TaskDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Dialog xác nhận xóa task an toàn */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Xác nhận xóa công việc"
+        description="Hành động này sẽ xóa vĩnh viễn công việc này khỏi dự án và không thể hoàn tác."
+        targetName={`"${task.title}"`}
+        confirmLabel="Xóa task"
+        cancelLabel="Hủy bỏ"
+        isDangerous={true}
+        onConfirm={() => {
+          if (onDeleteTask) {
+            onDeleteTask(task.id);
+            setShowDeleteConfirm(false);
+            onClose();
+          }
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

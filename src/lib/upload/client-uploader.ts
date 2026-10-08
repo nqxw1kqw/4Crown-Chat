@@ -1,6 +1,7 @@
 'use client';
 
 import { UploadKind } from '@/types/database';
+import { UPLOAD_LIMITS } from '@/lib/constants';
 
 export interface UploadProgress {
   uploadedBytes: number;
@@ -8,6 +9,8 @@ export interface UploadProgress {
   percentage: number;
   currentPart: number;
   totalParts: number;
+  speedBytesPerSec: number;
+  remainingSeconds: number;
   status: 'idle' | 'initializing' | 'uploading' | 'completing' | 'done' | 'error' | 'aborted';
   errorMessage?: string;
 }
@@ -15,23 +18,98 @@ export interface UploadProgress {
 export interface VideoMetadataExtraction {
   duration: number;
   thumbnailBlob: Blob | null;
+  decodeWarning?: boolean;
+}
+
+/**
+ * Kiểm tra xem phần mở rộng có kén trình duyệt không (.mov, .mkv)
+ */
+export function isKénTrìnhDuyệtFormat(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return lower.endsWith('.mov') || lower.endsWith('.mkv');
+}
+
+/**
+ * Kiểm tra tính hợp lệ của file trước khi upload
+ */
+export function validateUploadFile(
+  file: File,
+  kind: UploadKind,
+  maxSizeOverride?: number
+): { valid: boolean; error?: string; isKénTrìnhDuyệt?: boolean } {
+  const limitConfig = UPLOAD_LIMITS[kind];
+  if (!limitConfig) {
+    return { valid: false, error: 'Loại file không được hỗ trợ.' };
+  }
+
+  const effectiveMaxSize = maxSizeOverride ?? limitConfig.maxSize;
+  if (file.size > effectiveMaxSize) {
+    const maxGB = Math.round(effectiveMaxSize / (1024 * 1024 * 1024));
+    return {
+      valid: false,
+      error: `Dung lượng file (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB) vượt quá giới hạn tối đa ${maxGB}GB cho loại ${kind}.`,
+    };
+  }
+
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  const isAllowed = (limitConfig.allowedExtensions as readonly string[]).includes(ext);
+  if (!isAllowed) {
+    return {
+      valid: false,
+      error: `Định dạng ${ext} không được hỗ trợ. Các định dạng hợp lệ: ${limitConfig.allowedExtensions.join(', ')}.`,
+    };
+  }
+
+  return {
+    valid: true,
+    isKénTrìnhDuyệt: isKénTrìnhDuyệtFormat(file.name),
+  };
 }
 
 /**
  * 1. Trích xuất duration và thumbnail từ client bằng HTML5 Video và Canvas
+ * An toàn với timeout: Nếu trình duyệt không decode được file (như MKV, MOV), không bị treo popup!
  */
 export async function extractVideoMetadata(file: File): Promise<VideoMetadataExtraction> {
   return new Promise((resolve) => {
+    let hasResolved = false;
+
+    // Timeout an toàn sau 3.5 giây
+    const timeoutTimer = setTimeout(() => {
+      if (!hasResolved) {
+        hasResolved = true;
+        cleanup();
+        resolve({
+          duration: 0,
+          thumbnailBlob: null,
+          decodeWarning: isKénTrìnhDuyệtFormat(file.name),
+        });
+      }
+    }, 3500);
+
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
 
-    const url = URL.createObjectURL(file);
-    video.src = url;
+    let objectUrl = '';
+    try {
+      objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
+    } catch {
+      clearTimeout(timeoutTimer);
+      return resolve({ duration: 0, thumbnailBlob: null });
+    }
 
     const cleanup = () => {
-      URL.revokeObjectURL(url);
+      clearTimeout(timeoutTimer);
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {
+          // ignore
+        }
+      }
     };
 
     video.onloadedmetadata = () => {
@@ -42,6 +120,8 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadataExt
     };
 
     video.onseeked = () => {
+      if (hasResolved) return;
+      hasResolved = true;
       try {
         const canvas = document.createElement('canvas');
         canvas.width = Math.min(video.videoWidth || 640, 1280);
@@ -57,6 +137,7 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadataExt
               resolve({
                 duration: video.duration || 0,
                 thumbnailBlob: blob,
+                decodeWarning: false,
               });
             },
             'image/jpeg',
@@ -74,8 +155,14 @@ export async function extractVideoMetadata(file: File): Promise<VideoMetadataExt
     };
 
     video.onerror = () => {
+      if (hasResolved) return;
+      hasResolved = true;
       cleanup();
-      resolve({ duration: 0, thumbnailBlob: null });
+      resolve({
+        duration: 0,
+        thumbnailBlob: null,
+        decodeWarning: isKénTrìnhDuyệtFormat(file.name),
+      });
     };
   });
 }
@@ -122,7 +209,6 @@ export async function savePartProgress(
         key,
         parts: [],
       };
-      // Cập nhật part
       const existingIdx = record.parts.findIndex((p: { PartNumber: number }) => p.PartNumber === partNumber);
       if (existingIdx >= 0) {
         record.parts[existingIdx] = { PartNumber: partNumber, ETag: etag };
@@ -148,7 +234,7 @@ export async function clearUploadProgress(uploadId: string) {
 }
 
 /**
- * 3. Client Uploader: chia part, upload 3-4 luồng song song, bắt lỗi và resume
+ * 3. Client Uploader: chia part, upload 3-4 luồng song song, đo tốc độ/ETA và hỗ trợ AbortController
  */
 export async function uploadLargeFileToR2({
   projectId,
@@ -156,6 +242,7 @@ export async function uploadLargeFileToR2({
   kind,
   extraMetadata = {},
   onProgress,
+  signal,
   concurrency = 3,
 }: {
   projectId: string;
@@ -163,16 +250,29 @@ export async function uploadLargeFileToR2({
   kind: UploadKind;
   extraMetadata?: Record<string, unknown>;
   onProgress?: (progress: UploadProgress) => void;
+  signal?: AbortSignal;
   concurrency?: number;
 }) {
+  let uploadId = '';
+  let objectKey = '';
+  let uploadedBytes = 0;
+  const startTime = performance.now();
+
   const updateProgress = (state: Partial<UploadProgress>) => {
     if (onProgress) {
+      const elapsedSec = (performance.now() - startTime) / 1000;
+      const speed = elapsedSec > 0.5 ? uploadedBytes / elapsedSec : 0;
+      const remainingBytes = Math.max(0, file.size - uploadedBytes);
+      const eta = speed > 0 ? Math.ceil(remainingBytes / speed) : 0;
+
       onProgress({
-        uploadedBytes: 0,
+        uploadedBytes,
         totalBytes: file.size,
         percentage: 0,
         currentPart: 0,
         totalParts: 1,
+        speedBytesPerSec: speed,
+        remainingSeconds: eta,
         status: 'uploading',
         ...state,
       });
@@ -180,6 +280,12 @@ export async function uploadLargeFileToR2({
   };
 
   updateProgress({ status: 'initializing' });
+
+  // Kiểm tra nếu đã bị abort từ trước
+  if (signal?.aborted) {
+    updateProgress({ status: 'aborted' });
+    throw new Error('Upload đã bị hủy.');
+  }
 
   // A. Trích xuất video metadata & upload thumbnail nếu là video
   let thumbnailKey: string | null = null;
@@ -189,12 +295,13 @@ export async function uploadLargeFileToR2({
     const { duration, thumbnailBlob } = await extractVideoMetadata(file);
     videoDuration = duration;
 
-    if (thumbnailBlob) {
+    if (thumbnailBlob && !signal?.aborted) {
       try {
         const thumbRes = await fetch('/api/uploads/thumbnail-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectId }),
+          signal,
         });
         if (thumbRes.ok) {
           const thumbData = await thumbRes.json();
@@ -202,6 +309,7 @@ export async function uploadLargeFileToR2({
             method: 'PUT',
             body: thumbnailBlob,
             headers: { 'Content-Type': 'image/jpeg' },
+            signal,
           });
           thumbnailKey = thumbData.thumbnailKey;
         }
@@ -209,6 +317,11 @@ export async function uploadLargeFileToR2({
         console.warn('Không thể upload thumbnail:', thumbErr);
       }
     }
+  }
+
+  if (signal?.aborted) {
+    updateProgress({ status: 'aborted' });
+    throw new Error('Upload đã bị hủy.');
   }
 
   // B. Gọi /api/uploads/init
@@ -222,34 +335,58 @@ export async function uploadLargeFileToR2({
       mime: file.type,
       kind,
     }),
+    signal,
   });
 
   if (!initRes.ok) {
     const errData = await initRes.json();
-    throw new Error(errData.error || 'Khởi tạo upload thất bại');
+    throw new Error(errData.error || 'Khởi tạo upload thất bại.');
   }
 
-  const { uploadId, key, partSize, totalParts, partUrls } = await initRes.json();
+  const initData = await initRes.json();
+  uploadId = initData.uploadId;
+  objectKey = initData.key;
+  const partSize = initData.partSize;
+  const totalParts = initData.totalParts;
+  const partUrls = initData.partUrls;
 
   const urlMap = new Map<number, string>();
   for (const item of partUrls) {
     urlMap.set(item.partNumber, item.url);
   }
 
+  // Helper dọn dẹp khi bị Abort
+  const abortUploadOnServer = async () => {
+    if (uploadId && objectKey) {
+      try {
+        await fetch('/api/uploads/abort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, uploadId, key: objectKey }),
+        });
+        await clearUploadProgress(uploadId);
+      } catch (e) {
+        console.warn('Lỗi gọi abort API:', e);
+      }
+    }
+  };
+
+  signal?.addEventListener('abort', () => {
+    abortUploadOnServer();
+    updateProgress({ status: 'aborted' });
+  });
+
   // C. Danh sách completed parts
   const completedParts: { PartNumber: number; ETag: string }[] = [];
-  const partSizesMap = new Map<number, number>();
 
-  let uploadedBytes = 0;
-
-  // Helper lấy URL của part (nếu chưa có trong batch ban đầu thì gọi endpoint /part-url)
   const getUrlForPart = async (pNum: number): Promise<string> => {
     if (urlMap.has(pNum)) return urlMap.get(pNum)!;
 
     const res = await fetch('/api/uploads/part-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, uploadId, key, partNumber: pNum }),
+      body: JSON.stringify({ projectId, uploadId, key: objectKey, partNumber: pNum }),
+      signal,
     });
     if (!res.ok) throw new Error(`Không lấy được URL cho part ${pNum}`);
     const data = await res.json();
@@ -264,18 +401,21 @@ export async function uploadLargeFileToR2({
   }
 
   const uploadPartWorker = async (partNumber: number) => {
+    if (signal?.aborted) return;
+
     const start = (partNumber - 1) * partSize;
     const end = Math.min(start + partSize, file.size);
     const chunk = file.slice(start, end);
     const chunkSize = chunk.size;
-    partSizesMap.set(partNumber, chunkSize);
 
     const presignedUrl = await getUrlForPart(partNumber);
 
-    // Thực hiện PUT trực tiếp lên Cloudflare R2
+    if (signal?.aborted) return;
+
     const putRes = await fetch(presignedUrl, {
       method: 'PUT',
       body: chunk,
+      signal,
     });
 
     if (!putRes.ok) {
@@ -285,8 +425,7 @@ export async function uploadLargeFileToR2({
     const etag = putRes.headers.get('ETag')?.replace(/"/g, '') || `etag-${partNumber}`;
     completedParts.push({ PartNumber: partNumber, ETag: `"${etag}"` });
 
-    // Lưu IndexedDB
-    await savePartProgress(uploadId, key, partNumber, etag);
+    await savePartProgress(uploadId, objectKey, partNumber, etag);
 
     uploadedBytes += chunkSize;
     updateProgress({
@@ -299,10 +438,10 @@ export async function uploadLargeFileToR2({
     });
   };
 
-  // E. Chạy đa luồng song song (concurrency: 3 hoặc 4)
+  // E. Chạy đa luồng song song
   let currentIndex = 0;
   const workers = Array.from({ length: Math.min(concurrency, totalParts) }, async () => {
-    while (currentIndex < tasks.length) {
+    while (currentIndex < tasks.length && !signal?.aborted) {
       const taskIndex = currentIndex++;
       const partNum = tasks[taskIndex];
       await uploadPartWorker(partNum);
@@ -310,6 +449,11 @@ export async function uploadLargeFileToR2({
   });
 
   await Promise.all(workers);
+
+  if (signal?.aborted) {
+    updateProgress({ status: 'aborted' });
+    throw new Error('Upload đã bị hủy.');
+  }
 
   // F. Hoàn tất upload
   updateProgress({ status: 'completing', percentage: 100 });
@@ -320,7 +464,7 @@ export async function uploadLargeFileToR2({
     body: JSON.stringify({
       projectId,
       uploadId,
-      key,
+      key: objectKey,
       parts: completedParts,
       kind,
       size: file.size,
@@ -336,14 +480,14 @@ export async function uploadLargeFileToR2({
         linkedTaskId: (extraMetadata.linkedTaskId as string) || null,
       },
     }),
+    signal,
   });
 
   if (!completeRes.ok) {
     const completeErr = await completeRes.json();
-    throw new Error(completeErr.error || 'Lỗi khi hoàn tất upload');
+    throw new Error(completeErr.error || 'Lỗi khi hoàn tất upload.');
   }
 
-  // Dọn dẹp IndexedDB
   await clearUploadProgress(uploadId);
 
   const result = await completeRes.json();
