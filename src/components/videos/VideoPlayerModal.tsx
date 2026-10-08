@@ -10,14 +10,13 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog';
 interface VideoPlayerModalProps {
   video: GameplayVideo;
   onClose: () => void;
-  userRole: ProjectRole;
+  userRole?: ProjectRole;
   onDeleteVideo?: (videoId: string) => void;
 }
 
 export default function VideoPlayerModal({
   video,
   onClose,
-  userRole,
   onDeleteVideo,
 }: VideoPlayerModalProps) {
   const { t, formatBytes, formatDuration, formatDate } = useLocale();
@@ -94,8 +93,6 @@ export default function VideoPlayerModal({
       isMounted = false;
     };
   }, [video.id, video.file_key]);
-
-  const canDelete = userRole === 'OWNER' || userRole === 'ADMIN';
 
   return (
     <div
@@ -207,7 +204,7 @@ export default function VideoPlayerModal({
               <RefreshCw className="h-3.5 w-3.5" /> {t('videoPlayer.refreshLink')}
             </button>
 
-            {canDelete && onDeleteVideo && (
+            {onDeleteVideo && (
               <Button
                 variant="danger"
                 size="sm"

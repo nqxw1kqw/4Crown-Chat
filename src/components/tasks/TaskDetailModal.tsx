@@ -8,26 +8,23 @@ import {
   Square,
   Plus,
   Trash2,
-  AlertCircle,
   Percent,
 } from 'lucide-react';
-import { Task, TaskChecklistItem, ProjectRole, Profile, TaskStatus, TaskPriority } from '@/types/database';
+import { Task, TaskChecklistItem, TaskStatus, TaskPriority } from '@/types/database';
 import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG } from '@/lib/constants';
 import { useLocale } from '@/i18n/useLocale';
 import { TranslationKey } from '@/i18n/dictionaries/vi';
 import { StatusBadge, PriorityBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
-import { getRoleRestrictionMessage } from '@/lib/permissions';
+import { SlotId, SLOT_IDS } from '@/lib/profile';
 
 interface TaskDetailModalProps {
   task: Task;
   onClose: () => void;
   onUpdateTask: (updated: Partial<Task>) => void;
   onDeleteTask?: (taskId: string) => void;
-  members: { user_id: string; profile: Profile }[];
-  currentUserId: string;
-  userRole: ProjectRole;
+  profileNames: Record<SlotId, string>;
 }
 
 export default function TaskDetailModal({
@@ -35,17 +32,9 @@ export default function TaskDetailModal({
   onClose,
   onUpdateTask,
   onDeleteTask,
-  members,
-  currentUserId,
-  userRole,
+  profileNames,
 }: TaskDetailModalProps) {
   const { t, formatDate } = useLocale();
-
-  // Kiểm tra quyền chỉnh sửa theo RBAC
-  const canEdit =
-    userRole === 'OWNER' ||
-    userRole === 'ADMIN' ||
-    (userRole === 'MEMBER' && (task.assignee_id === currentUserId || task.creator_id === currentUserId));
 
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
@@ -69,7 +58,6 @@ export default function TaskDetailModal({
 
   // Toggle checklist item
   const handleToggleChecklist = (itemId: string) => {
-    if (!canEdit) return;
     const updated = checklist.map((item) =>
       item.id === itemId ? { ...item, done: !item.done } : item
     );
@@ -85,7 +73,7 @@ export default function TaskDetailModal({
   // Thêm checklist item
   const handleAddChecklistItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEdit || !newChecklistLabel.trim()) return;
+    if (!newChecklistLabel.trim()) return;
 
     const newItem: TaskChecklistItem = {
       id: `check-${crypto.randomUUID()}`,
@@ -98,95 +86,86 @@ export default function TaskDetailModal({
 
     const updated = [...checklist, newItem];
     setChecklist(updated);
+
+    const doneCount = updated.filter((i) => i.done).length;
+    const autoProgress = Math.round((doneCount / updated.length) * 100);
+    setProgress(autoProgress);
+
+    onUpdateTask({ checklist: updated, progress: autoProgress });
     setNewChecklistLabel('');
-    onUpdateTask({ checklist: updated });
   };
 
   // Xóa checklist item
   const handleDeleteChecklistItem = (itemId: string) => {
-    if (!canEdit) return;
     const updated = checklist.filter((item) => item.id !== itemId);
     setChecklist(updated);
-    onUpdateTask({ checklist: updated });
+
+    const doneCount = updated.filter((i) => i.done).length;
+    const autoProgress = updated.length > 0 ? Math.round((doneCount / updated.length) * 100) : 0;
+    setProgress(autoProgress);
+
+    onUpdateTask({ checklist: updated, progress: autoProgress });
   };
 
-  const handleSaveField = (field: keyof Task, val: unknown) => {
-    if (!canEdit) return;
-    onUpdateTask({ [field]: val });
+  // Lưu từng trường riêng lẻ
+  const handleSaveField = (field: keyof Task, value: unknown) => {
+    onUpdateTask({ [field]: value });
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="task-detail-modal-title"
     >
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-2xl flex flex-col max-h-[90vh] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
           <div className="flex items-center gap-2">
             <StatusBadge status={status} />
             <PriorityBadge priority={priority} />
           </div>
-
-          <div className="flex items-center gap-2">
-            {!canEdit && (
-              <span
-                className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1 font-medium"
-                title={getRoleRestrictionMessage(t('action.editTask'), userRole, t)}
-              >
-                <AlertCircle className="h-3.5 w-3.5" /> {t('taskDetail.viewOnly')}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t('taskDetail.closeAria')}
-              className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('taskDetail.closeAria')}
+            className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Title */}
+        {/* Content Body */}
+        <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Title Input */}
           <div>
-            {canEdit ? (
-              <input
-                id="task-detail-modal-title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => handleSaveField('title', title)}
-                className="w-full text-lg font-bold text-[var(--color-text)] bg-transparent border-b border-transparent focus:border-[var(--color-accent)] focus:outline-none transition-colors"
-                placeholder={t('taskDetail.titlePlaceholder')}
-              />
-            ) : (
-              <h2 id="task-detail-modal-title" className="text-lg font-bold text-[var(--color-text)]">
-                {task.title}
-              </h2>
-            )}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => handleSaveField('title', title)}
+              aria-label={t('taskDetail.titlePlaceholder')}
+              placeholder={t('taskDetail.titlePlaceholder')}
+              className="w-full bg-transparent text-lg font-bold text-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)] rounded-lg px-2 py-1"
+            />
           </div>
 
-          {/* Quick Selectors: Status, Priority, Assignee */}
+          {/* Grid Selectors: Status, Priority, Assignee (4 Slots) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Status Selector */}
+            {/* Status */}
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
               <label className="text-[11px] font-medium text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
                 {t('taskDetail.statusLabel')}
               </label>
               <select
-                disabled={!canEdit}
                 value={status}
                 onChange={(e) => {
-                  const newStatus = e.target.value as TaskStatus;
-                  setStatus(newStatus);
-                  handleSaveField('status', newStatus);
+                  const newStat = e.target.value as TaskStatus;
+                  setStatus(newStat);
+                  handleSaveField('status', newStat);
                 }}
-                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-60 cursor-pointer"
+                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
               >
                 {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((st) => (
                   <option key={st} value={st}>
@@ -196,20 +175,19 @@ export default function TaskDetailModal({
               </select>
             </div>
 
-            {/* Priority Selector */}
+            {/* Priority */}
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
               <label className="text-[11px] font-medium text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
                 {t('taskDetail.priorityLabel')}
               </label>
               <select
-                disabled={!canEdit}
                 value={priority}
                 onChange={(e) => {
                   const newPri = e.target.value as TaskPriority;
                   setPriority(newPri);
                   handleSaveField('priority', newPri);
                 }}
-                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-60 cursor-pointer"
+                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
               >
                 {(Object.keys(TASK_PRIORITY_CONFIG) as TaskPriority[]).map((pri) => (
                   <option key={pri} value={pri}>
@@ -219,25 +197,24 @@ export default function TaskDetailModal({
               </select>
             </div>
 
-            {/* Assignee Selector */}
+            {/* Assignee Selector (4 Slots) */}
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
               <label className="text-[11px] font-medium text-[var(--color-text-muted)] uppercase tracking-wider block mb-1">
                 {t('taskDetail.assigneeLabel')}
               </label>
               <select
-                disabled={!canEdit}
                 value={assigneeId || ''}
                 onChange={(e) => {
                   const newAss = e.target.value || null;
                   setAssigneeId(newAss);
                   handleSaveField('assignee_id', newAss);
                 }}
-                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-60 cursor-pointer"
+                className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border-strong)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
               >
-                <option value="">{t('tasks.unassigned')}</option>
-                {members.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.profile.display_name}
+                <option value="">{t('assignee.unassigned')}</option>
+                {SLOT_IDS.map((slotId) => (
+                  <option key={slotId} value={slotId}>
+                    {profileNames[slotId]} ({slotId.toUpperCase()})
                   </option>
                 ))}
               </select>
@@ -256,12 +233,11 @@ export default function TaskDetailModal({
               type="range"
               min="0"
               max="100"
-              disabled={!canEdit}
               value={progress}
               onChange={(e) => setProgress(Number(e.target.value))}
               onMouseUp={() => handleSaveField('progress', progress)}
               onTouchEnd={() => handleSaveField('progress', progress)}
-              className="w-full accent-indigo-500 cursor-pointer disabled:cursor-not-allowed"
+              className="w-full accent-indigo-500 cursor-pointer"
             />
           </div>
 
@@ -270,20 +246,14 @@ export default function TaskDetailModal({
             <label className="text-xs font-semibold text-[var(--color-text)] block mb-2">
               {t('taskDetail.descriptionLabel')}
             </label>
-            {canEdit ? (
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                onBlur={() => handleSaveField('description', description)}
-                placeholder={t('taskDetail.formDescPlaceholder')}
-                className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
-              />
-            ) : (
-              <p className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text-muted)]">
-                {task.description || t('taskDetail.noDescription')}
-              </p>
-            )}
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => handleSaveField('description', description)}
+              placeholder={t('taskDetail.formDescPlaceholder')}
+              className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:ring-2 focus:ring-[var(--color-accent)] focus:outline-none"
+            />
           </div>
 
           {/* Checklist */}
@@ -298,17 +268,16 @@ export default function TaskDetailModal({
               </h3>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {checklist.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between group p-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-border-strong)]"
+                  className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)] transition-colors group"
                 >
                   <button
                     type="button"
-                    disabled={!canEdit}
                     onClick={() => handleToggleChecklist(item.id)}
-                    className="flex items-center gap-3 text-left flex-1 cursor-pointer"
+                    className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer"
                   >
                     {item.done ? (
                       <CheckSquare className="h-4 w-4 text-emerald-400 shrink-0" />
@@ -318,45 +287,41 @@ export default function TaskDetailModal({
                     <span
                       className={`text-xs ${
                         item.done ? 'line-through text-[var(--color-text-muted)]' : 'text-[var(--color-text)]'
-                      }`}
+                      } truncate`}
                     >
                       {item.label}
                     </span>
                   </button>
-
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteChecklistItem(item.id)}
-                      className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] opacity-0 group-hover:opacity-100 transition-opacity p-1 cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteChecklistItem(item.id)}
+                    aria-label={t('common.delete')}
+                    className="opacity-0 group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-rose-400 p-1 transition-opacity cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               ))}
             </div>
 
-            {/* Add checklist input */}
-            {canEdit && (
-              <form onSubmit={handleAddChecklistItem} className="flex gap-2 mt-2">
-                <input
-                  type="text"
-                  value={newChecklistLabel}
-                  onChange={(e) => setNewChecklistLabel(e.target.value)}
-                  placeholder={t('taskDetail.addChecklistPlaceholder')}
-                  className="flex-1 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                />
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!newChecklistLabel.trim()}
-                  icon={Plus}
-                >
-                  {t('taskDetail.addChecklistBtn')}
-                </Button>
-              </form>
-            )}
+            {/* Add Checklist Item Form */}
+            <form onSubmit={handleAddChecklistItem} className="flex gap-2">
+              <input
+                type="text"
+                value={newChecklistLabel}
+                onChange={(e) => setNewChecklistLabel(e.target.value)}
+                placeholder={t('taskDetail.addChecklistPlaceholder')}
+                className="flex-1 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!newChecklistLabel.trim()}
+                icon={Plus}
+              >
+                {t('taskDetail.addChecklistBtn')}
+              </Button>
+            </form>
           </div>
 
           {/* Deadline & Meta */}
@@ -365,7 +330,7 @@ export default function TaskDetailModal({
               <Calendar className="h-4 w-4" />
               <span>{t('taskDetail.deadlineLabel', { date: formatDate(task.deadline) })}</span>
             </div>
-            {canEdit && onDeleteTask && (userRole === 'OWNER' || userRole === 'ADMIN') && (
+            {onDeleteTask && (
               <Button
                 variant="danger"
                 size="sm"

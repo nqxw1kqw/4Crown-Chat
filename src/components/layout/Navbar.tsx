@@ -6,22 +6,21 @@ import {
   FolderKanban,
   Video,
   FileBox,
-  Users,
   LayoutDashboard,
-  ChevronDown,
+  User,
   Menu,
   X,
 } from 'lucide-react';
-import { ProjectRole } from '@/types/database';
 import { useLocale } from '@/i18n/useLocale';
-import { TranslationKey } from '@/i18n/dictionaries/vi';
+import { LocalProfileState, getSlotDisplayName } from '@/lib/profile';
+import { ProjectRole } from '@/types/database';
 
 interface NavbarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
-  currentRole: ProjectRole;
-  onRoleChange: (role: ProjectRole) => void;
   projectName: string;
+  currentProfile: LocalProfileState;
+  onOpenProfile: () => void;
 }
 
 const ROLE_COLOR_STYLES: Record<ProjectRole, string> = {
@@ -34,28 +33,26 @@ const ROLE_COLOR_STYLES: Record<ProjectRole, string> = {
 export default function Navbar({
   currentTab,
   onTabChange,
-  currentRole,
-  onRoleChange,
   projectName,
+  currentProfile,
+  onOpenProfile,
 }: NavbarProps) {
   const { locale, setLocale, t } = useLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
 
-  // Chỉ hiển thị Role Switcher khi dev hoặc khi bật cờ NEXT_PUBLIC_SHOW_ROLE_SWITCHER
-  const showRoleSwitcher =
-    process.env.NODE_ENV !== 'production' ||
-    process.env.NEXT_PUBLIC_SHOW_ROLE_SWITCHER === 'true';
-
+  // 4 Tab chính (Bỏ hoàn toàn mục Team theo yêu cầu Vòng 3)
   const navItems = [
     { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
     { id: 'tasks', label: t('nav.tasks'), icon: FolderKanban },
     { id: 'videos', label: t('nav.videos'), icon: Video },
     { id: 'files', label: t('nav.files'), icon: FileBox },
-    { id: 'members', label: t('nav.members'), icon: Users },
   ];
 
-  const currentRoleLabel = t(`role.${currentRole}` as TranslationKey);
+  const currentDisplayName = getSlotDisplayName(
+    currentProfile.currentSlotId,
+    currentProfile.names,
+    t('assignee.unknown')
+  );
 
   return (
     <>
@@ -86,7 +83,7 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Desktop Navigation */}
+          {/* Desktop Navigation (4 Tab) */}
           <nav className="hidden md:flex items-center gap-1" aria-label={t('nav.mainNavigation')}>
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -109,7 +106,7 @@ export default function Navbar({
             })}
           </nav>
 
-          {/* Right Controls: Language Switcher + Role Selector + Mobile Menu Toggle */}
+          {/* Right Controls: Language Switcher + My Profile Button + Mobile Menu Toggle */}
           <div className="flex items-center gap-2.5">
             {/* Language Switcher Segmented Control */}
             <div
@@ -145,67 +142,24 @@ export default function Navbar({
               </button>
             </div>
 
-            {/* Role Switcher */}
-            {showRoleSwitcher ? (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setRoleDropdownOpen(!roleDropdownOpen)}
-                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] min-h-[36px] cursor-pointer ${ROLE_COLOR_STYLES[currentRole]}`}
-                  title={t('nav.roleSwitchTitle')}
-                  aria-haspopup="listbox"
-                  aria-expanded={roleDropdownOpen}
-                  aria-label={t('nav.currentRole', { role: currentRoleLabel })}
-                >
-                  <span>{currentRoleLabel}</span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
-                </button>
-
-                {roleDropdownOpen && (
-                  <div
-                    className="absolute right-0 mt-2 w-52 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100"
-                    role="listbox"
-                    aria-label={t('nav.roleTesting')}
-                  >
-                    <div className="px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)] mb-1">
-                      {t('nav.roleTesting')}
-                    </div>
-                    {(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'] as ProjectRole[]).map((role) => {
-                      const label = t(`role.${role}` as TranslationKey);
-                      return (
-                        <button
-                          key={role}
-                          type="button"
-                          onClick={() => {
-                            onRoleChange(role);
-                            setRoleDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] min-h-[36px] cursor-pointer ${
-                            currentRole === role
-                              ? 'bg-[var(--color-accent)]/20 text-indigo-300 font-semibold'
-                              : 'text-[var(--color-text)] hover:bg-[var(--color-surface)]'
-                          }`}
-                          role="option"
-                          aria-selected={currentRole === role}
-                        >
-                          <span>{label}</span>
-                          {currentRole === role && (
-                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" aria-hidden="true" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+            {/* My Profile Button (Thay thế hoàn toàn Role Switcher) */}
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="flex items-center gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--color-surface-raised)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] min-h-[36px] cursor-pointer"
+              title={t('profile.myProfile')}
+              aria-label={t('profile.myProfile')}
+            >
+              <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-[var(--color-accent)]/20 text-indigo-400">
+                <User className="h-3.5 w-3.5" />
               </div>
-            ) : (
-              <span
-                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold ${ROLE_COLOR_STYLES[currentRole]}`}
-                aria-label={t('nav.currentRole', { role: currentRoleLabel })}
-              >
-                {currentRoleLabel}
+              <span className="font-semibold text-[var(--color-text)] max-w-[100px] sm:max-w-[130px] truncate">
+                {currentDisplayName}
               </span>
-            )}
+              <span className={`rounded-md border px-1.5 py-0.2 text-[10px] font-bold ${ROLE_COLOR_STYLES[currentProfile.role]}`}>
+                {currentProfile.role}
+              </span>
+            </button>
 
             {/* Mobile Menu Toggle Button */}
             <button
@@ -220,7 +174,7 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* Mobile Drawer Dropdown */}
+        {/* Mobile Drawer Dropdown (4 Tab + Hồ sơ) */}
         {mobileMenuOpen && (
           <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 pt-2 pb-4 md:hidden animate-in slide-in-from-top-2">
             <div className="space-y-1">
@@ -246,12 +200,27 @@ export default function Navbar({
                   </button>
                 );
               })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenProfile();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium min-h-[48px] text-[var(--color-text)] hover:bg-[var(--color-surface-raised)] border border-[var(--color-border)] cursor-pointer mt-2"
+              >
+                <User className="h-5 w-5 text-indigo-400" aria-hidden="true" />
+                <span>{t('profile.myProfile')}</span>
+                <span className={`ml-auto rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${ROLE_COLOR_STYLES[currentProfile.role]}`}>
+                  {currentProfile.role}
+                </span>
+              </button>
             </div>
           </div>
         )}
       </header>
 
-      {/* Mobile Fixed Bottom Navigation */}
+      {/* Mobile Fixed Bottom Navigation (4 mục: Dashboard, Tasks, Videos, Files) */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--color-bg)]/95 border-t border-[var(--color-border)] backdrop-blur-md px-2 py-1 flex items-center justify-around shadow-2xl pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]"
         aria-label={t('nav.mobileNavigation')}

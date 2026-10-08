@@ -6,31 +6,31 @@ import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import TaskList from '@/components/tasks/TaskList';
 import VideoGallery from '@/components/videos/VideoGallery';
 import FileVault from '@/components/files/FileVault';
-import MemberManagement from '@/components/members/MemberManagement';
+import IdentityModal from '@/components/profile/IdentityModal';
+import ProfileModal from '@/components/profile/ProfileModal';
 import { ToastProvider } from '@/components/ui/Toast';
 import { LocaleProvider } from '@/i18n/LocaleContext';
-import { MOCK_CURRENT_USER } from '@/lib/mock-data';
-import { DEFAULT_PROJECT_ID, DEFAULT_USER_ID } from '@/lib/constants';
-import { Task, GameplayVideo, FileRecord, ProjectRole, ProjectMember, Profile } from '@/types/database';
+import { DEFAULT_PROJECT_ID } from '@/lib/constants';
+import {
+  LocalProfileState,
+  useLocalProfile,
+  useIsMounted,
+  saveStoredProfile,
+  resetStoredProfile,
+} from '@/lib/profile';
+import { Task, GameplayVideo, FileRecord } from '@/types/database';
 
 export default function Home() {
+  const isMounted = useIsMounted();
+  const profile = useLocalProfile();
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const [currentTab, setCurrentTab] = useState('dashboard');
-  const [currentRole, setCurrentRole] = useState<ProjectRole>('OWNER');
 
   // Application state (Khởi tạo trạng thái trống theo yêu cầu của Shin)
   const [tasks, setTasks] = useState<Task[]>([]);
   const [videos, setVideos] = useState<GameplayVideo[]>([]);
   const [files, setFiles] = useState<FileRecord[]>([]);
-  const [members, setMembers] = useState<(ProjectMember & { profile: Profile })[]>([
-    {
-      id: 'pm-1',
-      project_id: DEFAULT_PROJECT_ID,
-      user_id: DEFAULT_USER_ID,
-      role: 'OWNER',
-      created_at: '2026-10-08T00:00:00Z',
-      profile: MOCK_CURRENT_USER,
-    },
-  ]);
 
   // Selected item navigation states
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -39,13 +39,7 @@ export default function Home() {
   const currentProject = {
     id: DEFAULT_PROJECT_ID,
     name: 'Game Team Project',
-    description: 'Dự án mới sẵn sàng để bắt đầu',
-    status: 'active',
-    created_by: DEFAULT_USER_ID,
-    created_at: '2026-10-08T00:00:00Z',
-    updated_at: '2026-10-08T00:00:00Z',
   };
-  const currentUserId = MOCK_CURRENT_USER.id;
 
   // Task actions
   const handleUpdateTask = (taskId: string, updated: Partial<Task>) => {
@@ -58,6 +52,7 @@ export default function Home() {
     const newTask: Task = {
       ...newTaskData,
       id: `task-${crypto.randomUUID()}`,
+      creator_id: newTaskData.creator_id || profile.currentSlotId || 'm1',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -86,35 +81,20 @@ export default function Home() {
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
-  // Member actions
-  const handleUpdateRole = (userId: string, newRole: ProjectRole) => {
-    setMembers((prev) =>
-      prev.map((m) => (m.user_id === userId ? { ...m, role: newRole } : m))
-    );
+  const handleIdentityConfirm = (updated: LocalProfileState) => {
+    saveStoredProfile(updated);
   };
 
-  const handleRemoveMember = (userId: string) => {
-    setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+  const handleUpdateProfile = (updated: LocalProfileState) => {
+    saveStoredProfile(updated);
   };
 
-  const handleAddMember = (displayName: string, role: ProjectRole) => {
-    const newUid = `user-${crypto.randomUUID()}`;
-    const newM: ProjectMember & { profile: Profile } = {
-      id: `pm-${crypto.randomUUID()}`,
-      project_id: currentProject.id,
-      user_id: newUid,
-      role,
-      created_at: new Date().toISOString(),
-      profile: {
-        id: newUid,
-        display_name: displayName,
-        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(displayName)}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    };
-    setMembers((prev) => [...prev, newM]);
+  const handleResetIdentity = () => {
+    resetStoredProfile();
+    setShowProfileModal(false);
   };
+
+  const currentSlotId = profile.currentSlotId;
 
   return (
     <LocaleProvider>
@@ -128,9 +108,9 @@ export default function Home() {
               setSelectedTaskId(null);
               setSelectedVideo(null);
             }}
-            currentRole={currentRole}
-            onRoleChange={(role) => setCurrentRole(role)}
             projectName={currentProject.name}
+            currentProfile={profile}
+            onOpenProfile={() => setShowProfileModal(true)}
           />
 
           {/* Main Container: chừa khoảng đệm dưới cho Mobile Bottom Navigation */}
@@ -140,8 +120,7 @@ export default function Home() {
                 tasks={tasks}
                 videos={videos}
                 files={files}
-                currentUserId={currentUserId}
-                userRole={currentRole}
+                currentUserId={currentSlotId || ''}
                 onSelectTask={(task) => {
                   setSelectedTaskId(task.id);
                   setCurrentTab('tasks');
@@ -157,9 +136,8 @@ export default function Home() {
             {currentTab === 'tasks' && (
               <TaskList
                 tasks={tasks}
-                members={members}
-                currentUserId={currentUserId}
-                userRole={currentRole}
+                profileNames={profile.names}
+                currentSlotId={currentSlotId}
                 onUpdateTask={handleUpdateTask}
                 onCreateTask={handleCreateTask}
                 onDeleteTask={handleDeleteTask}
@@ -171,8 +149,7 @@ export default function Home() {
             {currentTab === 'videos' && (
               <VideoGallery
                 videos={videos}
-                userRole={currentRole}
-                currentUserId={currentUserId}
+                currentUserId={currentSlotId || 'm1'}
                 projectId={currentProject.id}
                 onAddVideo={handleAddVideo}
                 onDeleteVideo={handleDeleteVideo}
@@ -185,25 +162,33 @@ export default function Home() {
               <FileVault
                 files={files}
                 tasks={tasks}
-                userRole={currentRole}
-                currentUserId={currentUserId}
+                currentUserId={currentSlotId || 'm1'}
                 projectId={currentProject.id}
                 onAddFile={handleAddFile}
                 onDeleteFile={handleDeleteFile}
               />
             )}
-
-            {currentTab === 'members' && (
-              <MemberManagement
-                members={members}
-                userRole={currentRole}
-                currentUserId={currentUserId}
-                onUpdateRole={handleUpdateRole}
-                onRemoveMember={handleRemoveMember}
-                onAddMember={handleAddMember}
-              />
-            )}
           </main>
+
+          {/* Identity Selection Modal (Bắt buộc chọn lần đầu khi chưa có slotId) */}
+          {isMounted && (
+            <IdentityModal
+              isOpen={!profile.currentSlotId}
+              currentProfile={profile}
+              onSelectIdentity={handleIdentityConfirm}
+            />
+          )}
+
+          {/* Profile Modal (Hồ sơ của tôi trên Navbar) */}
+          {isMounted && (
+            <ProfileModal
+              isOpen={showProfileModal}
+              onClose={() => setShowProfileModal(false)}
+              currentProfile={profile}
+              onUpdateProfile={handleUpdateProfile}
+              onResetIdentity={handleResetIdentity}
+            />
+          )}
         </div>
       </ToastProvider>
     </LocaleProvider>

@@ -11,24 +11,23 @@ import {
   LayoutList,
   Kanban,
   GripVertical,
+  X,
 } from 'lucide-react';
-import { Task, ProjectRole, Profile, TaskStatus, TaskPriority } from '@/types/database';
+import { Task, TaskStatus, TaskPriority } from '@/types/database';
 import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, DEFAULT_PROJECT_ID } from '@/lib/constants';
 import { useToast } from '@/components/ui/Toast';
-import { canCreateTask, canEditTask, getRoleRestrictionMessage } from '@/lib/permissions';
 import { useLocale } from '@/i18n/useLocale';
 import { TranslationKey } from '@/i18n/dictionaries/vi';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PriorityBadge } from '@/components/ui/Badge';
-import { Tooltip } from '@/components/ui/Tooltip';
+import { SlotId, SLOT_IDS, getSlotDisplayName } from '@/lib/profile';
 import TaskDetailModal from './TaskDetailModal';
 
 interface TaskListProps {
   tasks: Task[];
-  members: { user_id: string; profile: Profile }[];
-  currentUserId: string;
-  userRole: ProjectRole;
+  profileNames: Record<SlotId, string>;
+  currentSlotId: SlotId | null;
   onUpdateTask: (taskId: string, updated: Partial<Task>) => void;
   onCreateTask: (newTask: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => void;
   onDeleteTask?: (taskId: string) => void;
@@ -46,9 +45,8 @@ const STATUS_GROUPS: { status: TaskStatus; countColor: string }[] = [
 
 export default function TaskList({
   tasks,
-  members,
-  currentUserId,
-  userRole,
+  profileNames,
+  currentSlotId,
   onUpdateTask,
   onCreateTask,
   onDeleteTask,
@@ -70,7 +68,7 @@ export default function TaskList({
   const [newDescription, setNewDescription] = useState('');
   const [newStatus, setNewStatus] = useState<TaskStatus>('TODO');
   const [newPriority, setNewPriority] = useState<TaskPriority>('NORMAL');
-  const [newAssigneeId, setNewAssigneeId] = useState<string>('');
+  const [newAssigneeId, setNewAssigneeId] = useState<string>(currentSlotId || '');
   const [newDeadline, setNewDeadline] = useState('');
 
   // Đọc tùy chọn chế độ hiển thị từ localStorage
@@ -108,13 +106,16 @@ export default function TaskList({
     }
   };
 
-  const canCreate = canCreateTask(userRole);
-
   // Lọc task theo người phụ trách và từ khóa tìm kiếm
   const filteredTasks = tasks.filter((task) => {
-    if (filterAssignee !== 'ALL' && task.assignee_id !== filterAssignee) {
-      return false;
+    if (filterAssignee === 'MINE') {
+      if (task.assignee_id !== currentSlotId) return false;
+    } else if (filterAssignee === 'UNASSIGNED') {
+      if (task.assignee_id) return false;
+    } else if (filterAssignee !== 'ALL') {
+      if (task.assignee_id !== filterAssignee) return false;
     }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = task.title.toLowerCase().includes(q);
@@ -141,7 +142,7 @@ export default function TaskList({
     }
   };
 
-  // Kéo thả Kanban (Drag and Drop)
+  // Kéo thả Kanban (Drag and Drop - Luôn cho phép mọi người)
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId);
   };
@@ -155,11 +156,6 @@ export default function TaskList({
     const taskId = e.dataTransfer.getData('text/plain');
     const targetTask = tasks.find((t) => t.id === taskId);
     if (!targetTask) return;
-
-    if (!canEditTask(userRole, targetTask, currentUserId)) {
-      error(t('tasks.noPermission'), getRoleRestrictionMessage(t('action.changeStatus'), userRole, t));
-      return;
-    }
 
     handleQuickStatusChange(targetTask, targetStatus);
   };
@@ -175,7 +171,7 @@ export default function TaskList({
       status: newStatus,
       priority: newPriority,
       assignee_id: newAssigneeId || null,
-      creator_id: currentUserId,
+      creator_id: currentSlotId || 'm1',
       progress: 0,
       deadline: newDeadline ? new Date(newDeadline).toISOString() : null,
       checklist: [],
@@ -187,9 +183,14 @@ export default function TaskList({
     setNewDescription('');
     setNewStatus('TODO');
     setNewPriority('NORMAL');
-    setNewAssigneeId('');
+    setNewAssigneeId(currentSlotId || '');
     setNewDeadline('');
     setShowCreateModal(false);
+  };
+
+  const formatTaskAssignee = (assigneeId?: string | null) => {
+    if (!assigneeId) return t('assignee.unassigned');
+    return getSlotDisplayName(assigneeId, profileNames, t('assignee.unknown'));
   };
 
   return (
@@ -210,7 +211,7 @@ export default function TaskList({
             />
           </div>
 
-          {/* Assignee Filter */}
+          {/* Assignee Filter (Lấy từ 4 slot cố định) */}
           <div className="relative">
             <select
               value={filterAssignee}
@@ -219,11 +220,15 @@ export default function TaskList({
               className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
             >
               <option value="ALL">{t('tasks.allAssignees')}</option>
-              {members.map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.profile.display_name}
+              {currentSlotId && (
+                <option value="MINE">★ {profileNames[currentSlotId]} ({t('tasks.filterMine')})</option>
+              )}
+              {SLOT_IDS.map((slotId) => (
+                <option key={slotId} value={slotId}>
+                  {profileNames[slotId]} ({slotId.toUpperCase()})
                 </option>
               ))}
+              <option value="UNASSIGNED">{t('assignee.unassigned')}</option>
             </select>
           </div>
 
@@ -258,52 +263,42 @@ export default function TaskList({
           </div>
         </div>
 
-        {/* Create Task Button */}
+        {/* Create Task Button (Luôn bật cho mọi thành viên) */}
         <div className="shrink-0">
-          {canCreate ? (
-            <Button
-              onClick={() => setShowCreateModal(true)}
-              icon={Plus}
-            >
-              {t('tasks.createTask')}
-            </Button>
-          ) : (
-            <Tooltip content={t('tasks.viewerNoCreate')}>
-              <Button
-                disabled
-                icon={Plus}
-              >
-                {t('tasks.createTask')}
-              </Button>
-            </Tooltip>
-          )}
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            icon={Plus}
+          >
+            {t('tasks.createTask')}
+          </Button>
         </div>
       </div>
 
-      {/* Empty State Banner khi chưa có task nào */}
-      {tasks.length === 0 && (
-        <Card className="border-dashed p-8 text-center bg-[var(--color-surface)]/50">
-          <ListTodo className="h-10 w-10 mx-auto text-indigo-400 mb-2 opacity-80" />
-          <h3 className="text-sm font-semibold text-[var(--color-text)]">{t('tasks.emptyTitle')}</h3>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto leading-relaxed">
+      {/* Trạng thái trống (Empty State) */}
+      {filteredTasks.length === 0 && (
+        <Card className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="h-12 w-12 rounded-2xl bg-[var(--color-surface-raised)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] mb-3">
+            <ListTodo className="h-6 w-6" />
+          </div>
+          <h3 className="text-sm font-bold text-[var(--color-text)] mb-1">
+            {t('tasks.emptyTitle')}
+          </h3>
+          <p className="text-xs text-[var(--color-text-muted)] max-w-sm mb-4">
             {t('tasks.emptyDescription')}
           </p>
-          {canCreate && (
-            <div className="mt-4">
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                icon={Plus}
-              >
-                {t('tasks.createTaskButton')}
-              </Button>
-            </div>
-          )}
+          <Button
+            size="sm"
+            onClick={() => setShowCreateModal(true)}
+            icon={Plus}
+          >
+            {t('tasks.createTask')}
+          </Button>
         </Card>
       )}
 
-      {/* Chế độ Kanban */}
+      {/* Chế độ Bảng Kanban (5 Cột) */}
       {viewMode === 'kanban' && tasks.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">
           {STATUS_GROUPS.map((group) => {
             const groupTasks = filteredTasks.filter((t) => t.status === group.status);
             const statusTitle = t(`status.${group.status}` as TranslationKey);
@@ -313,10 +308,10 @@ export default function TaskList({
                 key={group.status}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, group.status)}
-                className="flex flex-col min-w-[250px] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden shadow-sm"
+                className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden shadow-sm transition-colors"
               >
                 {/* Column Header */}
-                <div className="p-3.5 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] flex items-center justify-between">
+                <div className="p-3.5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-surface-raised)]">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">
                       {statusTitle}
@@ -334,50 +329,41 @@ export default function TaskList({
                       {t('tasks.kanbanDropPlaceholder')}
                     </div>
                   ) : (
-                    groupTasks.map((task) => {
-                      const assignee = members.find((m) => m.user_id === task.assignee_id)?.profile;
-                      const editable = canEditTask(userRole, task, currentUserId);
-
-                      return (
-                        <div
-                          key={task.id}
-                          draggable={editable}
-                          onDragStart={(e) => handleDragStart(e, task.id)}
-                          onClick={() => setActiveModalTask(task)}
-                          className={`p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)] cursor-pointer transition-all duration-150 shadow-sm ${
-                            editable ? 'cursor-grab active:cursor-grabbing' : ''
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <PriorityBadge priority={task.priority} />
-                            {editable && (
-                              <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] shrink-0" />
-                            )}
-                          </div>
-
-                          <h4 className="text-xs font-semibold text-[var(--color-text)] mt-1.5 line-clamp-2">
-                            {task.title}
-                          </h4>
-
-                          <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
-                            <span className="truncate max-w-[100px]">
-                              {assignee ? assignee.display_name : t('tasks.unassigned')}
-                            </span>
-                            {task.deadline && (
-                              <span
-                                className={
-                                  task.status !== 'DONE' && isOverdue(task.deadline, task.status)
-                                    ? 'text-[var(--color-danger)] font-semibold'
-                                    : 'text-[var(--color-text-muted)]'
-                                }
-                              >
-                                {formatDate(task.deadline)}
-                              </span>
-                            )}
-                          </div>
+                    groupTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, task.id)}
+                        onClick={() => setActiveModalTask(task)}
+                        className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)] cursor-grab active:cursor-grabbing transition-all duration-150 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <PriorityBadge priority={task.priority} />
+                          <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] shrink-0" />
                         </div>
-                      );
-                    })
+
+                        <h4 className="text-xs font-semibold text-[var(--color-text)] mt-1.5 line-clamp-2">
+                          {task.title}
+                        </h4>
+
+                        <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
+                          <span className="truncate max-w-[100px]">
+                            {formatTaskAssignee(task.assignee_id)}
+                          </span>
+                          {task.deadline && (
+                            <span
+                              className={
+                                task.status !== 'DONE' && isOverdue(task.deadline, task.status)
+                                  ? 'text-[var(--color-danger)] font-semibold'
+                                  : 'text-[var(--color-text-muted)]'
+                              }
+                            >
+                              {formatDate(task.deadline)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -418,107 +404,79 @@ export default function TaskList({
                       {t('tasks.columnEmpty')}
                     </div>
                   ) : (
-                    groupTasks.map((task) => {
-                      const assignee = members.find((m) => m.user_id === task.assignee_id)?.profile;
-                      const editable = canEditTask(userRole, task, currentUserId);
-
-                      return (
+                    groupTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                      >
+                        {/* Task Title & Details */}
                         <div
-                          key={task.id}
-                          className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                          onClick={() => setActiveModalTask(task)}
+                          className="flex-1 cursor-pointer min-w-0 pr-3"
                         >
-                          {/* Task Title & Details */}
-                          <div
-                            onClick={() => setActiveModalTask(task)}
-                            className="flex-1 cursor-pointer min-w-0 pr-3"
-                          >
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <PriorityBadge priority={task.priority} />
-                              <span className="text-[var(--color-text-muted)]">•</span>
-                              <h4 className="text-sm font-semibold text-[var(--color-text)] group-hover:text-indigo-300 transition-colors truncate">
-                                {task.title}
-                              </h4>
-                            </div>
-
-                            <div className="flex items-center gap-4 mt-2 text-xs text-[var(--color-text-muted)] flex-wrap">
-                              {/* Assignee */}
-                              <div className="flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-                                <span>{assignee ? assignee.display_name : t('tasks.unassigned')}</span>
-                              </div>
-
-                              {/* Deadline */}
-                              {task.deadline && (
-                                <div
-                                  className={`flex items-center gap-1.5 ${
-                                    task.status !== 'DONE' && isOverdue(task.deadline, task.status)
-                                      ? 'text-[var(--color-danger)] font-semibold'
-                                      : 'text-[var(--color-text-muted)]'
-                                  }`}
-                                >
-                                  <Calendar className="h-3.5 w-3.5" />
-                                  <span>{formatDate(task.deadline)}</span>
-                                </div>
-                              )}
-
-                              {/* Progress */}
-                              <div className="flex items-center gap-2">
-                                <div className="w-16 bg-[var(--color-surface-raised)] border border-[var(--color-border)] rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className="bg-indigo-500 h-1.5 rounded-full"
-                                    style={{ width: `${task.progress}%` }}
-                                  />
-                                </div>
-                                <span className="font-mono text-[11px]">{task.progress}%</span>
-                              </div>
-
-                              {/* Checklist count */}
-                              {task.checklist && task.checklist.length > 0 && (
-                                <span className="text-[11px] text-[var(--color-text-muted)] font-medium">
-                                  {t('tasks.checklistCount', {
-                                    done: task.checklist.filter((c) => c.done).length,
-                                    total: task.checklist.length,
-                                  })}
-                                </span>
-                              )}
-                            </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <PriorityBadge priority={task.priority} />
+                            <span className="text-[var(--color-text-muted)]">•</span>
+                            <h4 className="text-sm font-semibold text-[var(--color-text)] group-hover:text-indigo-300 transition-colors truncate">
+                              {task.title}
+                            </h4>
                           </div>
 
-                          {/* Quick Status Change Menu */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <select
-                              disabled={!editable}
-                              value={task.status}
-                              aria-label={`${t('tasks.quickStatusChange')}: ${task.title}`}
-                              title={
-                                !editable
-                                  ? getRoleRestrictionMessage(t('action.changeStatus'), userRole, t)
-                                  : t('tasks.quickStatusChange')
-                              }
-                              onChange={(e) => {
-                                handleQuickStatusChange(task, e.target.value as TaskStatus);
-                              }}
-                              className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2.5 py-1 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-50 cursor-pointer"
-                            >
-                              {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((st) => (
-                                <option key={st} value={st}>
-                                  {t(`status.${st}` as TranslationKey)}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-[var(--color-text-muted)] flex-wrap">
+                            {/* Assignee */}
+                            <div className="flex items-center gap-1.5">
+                              <User className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                              <span>{formatTaskAssignee(task.assignee_id)}</span>
+                            </div>
 
-                            <button
-                              type="button"
-                              onClick={() => setActiveModalTask(task)}
-                              className="p-1.5 rounded-xl text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-                              aria-label={t('tasks.viewDetailAria', { title: task.title })}
-                            >
-                              <ArrowRight className="h-4 w-4" />
-                            </button>
+                            {/* Deadline */}
+                            {task.deadline && (
+                              <div
+                                className={`flex items-center gap-1.5 ${
+                                  task.status !== 'DONE' && isOverdue(task.deadline, task.status)
+                                    ? 'text-[var(--color-danger)] font-semibold'
+                                    : ''
+                                }`}
+                              >
+                                <Calendar className="h-3.5 w-3.5" />
+                                <span>{formatDate(task.deadline)}</span>
+                              </div>
+                            )}
+
+                            {/* Checklist progress */}
+                            {task.checklist && task.checklist.length > 0 && (
+                              <div className="text-[11px] font-mono text-indigo-400">
+                                {task.checklist.filter((c) => c.done).length}/{task.checklist.length}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      );
-                    })
+
+                        {/* Quick Status Action Controls */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {task.status !== 'DONE' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickStatusChange(task, 'DONE');
+                              }}
+                              className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-emerald-500/50 hover:bg-emerald-500/10 text-emerald-400 font-medium transition-colors cursor-pointer"
+                            >
+                              {t('tasks.markDone')}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setActiveModalTask(task)}
+                            className="p-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+                            aria-label={t('tasks.viewDetailAria', { title: task.title })}
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </Card>
@@ -527,7 +485,7 @@ export default function TaskList({
         </div>
       )}
 
-      {/* Task Detail Modal */}
+      {/* Modal chi tiết Task */}
       {activeModalTask && (
         <TaskDetailModal
           task={activeModalTask}
@@ -540,28 +498,36 @@ export default function TaskList({
             setActiveModalTask((prev) => (prev ? { ...prev, ...updated } : null));
           }}
           onDeleteTask={onDeleteTask}
-          members={members}
-          currentUserId={currentUserId}
-          userRole={userRole}
+          profileNames={profileNames}
         />
       )}
 
-      {/* Create Task Modal */}
+      {/* Modal Tạo Task Mới */}
       {showCreateModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
           role="dialog"
           aria-modal="true"
           aria-labelledby="create-task-modal-title"
         >
-          <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 id="create-task-modal-title" className="text-base font-bold text-[var(--color-text)] mb-4">
-              {t('tasks.modalCreateTitle')}
-            </h3>
+          <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
+              <h3 id="create-task-modal-title" className="text-base font-bold text-[var(--color-text)]">
+                {t('tasks.modalCreateTitle')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                aria-label={t('tasks.closeModalAria')}
+                className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
+            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
                   {t('tasks.formTitle')}
                 </label>
                 <input
@@ -575,7 +541,7 @@ export default function TaskList({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
                   {t('tasks.formDescription')}
                 </label>
                 <textarea
@@ -589,44 +555,7 @@ export default function TaskList({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
-                    {t('tasks.formPriority')}
-                  </label>
-                  <select
-                    value={newPriority}
-                    onChange={(e) => setNewPriority(e.target.value as TaskPriority)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                  >
-                    {(Object.keys(TASK_PRIORITY_CONFIG) as TaskPriority[]).map((pri) => (
-                      <option key={pri} value={pri}>
-                        {t(`priority.${pri}` as TranslationKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
-                    {t('tasks.formAssignee')}
-                  </label>
-                  <select
-                    value={newAssigneeId}
-                    onChange={(e) => setNewAssigneeId(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                  >
-                    <option value="">{t('tasks.unassigned')}</option>
-                    {members.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>
-                        {m.profile.display_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
                     {t('tasks.formInitialStatus')}
                   </label>
                   <select
@@ -643,29 +572,70 @@ export default function TaskList({
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
+                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
+                    {t('tasks.formPriority')}
+                  </label>
+                  <select
+                    value={newPriority}
+                    onChange={(e) => setNewPriority(e.target.value as TaskPriority)}
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
+                  >
+                    {(Object.keys(TASK_PRIORITY_CONFIG) as TaskPriority[]).map((pr) => (
+                      <option key={pr} value={pr}>
+                        {t(`priority.${pr}` as TranslationKey)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
+                    {t('tasks.formAssignee')}
+                  </label>
+                  <select
+                    value={newAssigneeId}
+                    onChange={(e) => setNewAssigneeId(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
+                  >
+                    <option value="">{t('assignee.unassigned')}</option>
+                    {SLOT_IDS.map((slotId) => (
+                      <option key={slotId} value={slotId}>
+                        {profileNames[slotId]} ({slotId.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
                     {t('tasks.formDeadline')}
                   </label>
                   <input
                     type="date"
                     value={newDeadline}
                     onChange={(e) => setNewDeadline(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
+                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border)]">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
                 <Button
                   type="button"
                   variant="secondary"
+                  size="sm"
                   onClick={() => setShowCreateModal(false)}
                 >
-                  {t('tasks.formCancel')}
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   type="submit"
                   variant="primary"
+                  size="sm"
+                  disabled={!newTitle.trim()}
+                  icon={Plus}
                 >
                   {t('tasks.formSubmit')}
                 </Button>

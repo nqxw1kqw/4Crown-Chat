@@ -22,16 +22,14 @@ import {
   isBrowserUnsupportedFormat,
 } from '@/lib/upload/client-uploader';
 import { useToast } from '@/components/ui/Toast';
-import { canUpload as canUserUpload } from '@/lib/permissions';
 import { useLocale } from '@/i18n/useLocale';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Tooltip } from '@/components/ui/Tooltip';
 import VideoPlayerModal from './VideoPlayerModal';
 
 interface VideoGalleryProps {
   videos: GameplayVideo[];
-  userRole: ProjectRole;
+  userRole?: ProjectRole;
   currentUserId: string;
   projectId: string;
   onAddVideo: (newVid: GameplayVideo) => void;
@@ -68,8 +66,6 @@ export default function VideoGallery({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const canUpload = canUserUpload(userRole);
 
   const resetUploadForm = useCallback(() => {
     setSelectedFile(null);
@@ -267,23 +263,12 @@ export default function VideoGallery({
           </p>
         </div>
 
-        {canUpload ? (
-          <Button
-            onClick={() => setShowUploadModal(true)}
-            icon={Upload}
-          >
-            {t('videos.uploadBtn')}
-          </Button>
-        ) : (
-          <Tooltip content={t('videos.viewerNoUpload')}>
-            <Button
-              disabled
-              icon={Upload}
-            >
-              {t('videos.uploadBtn')}
-            </Button>
-          </Tooltip>
-        )}
+        <Button
+          onClick={() => setShowUploadModal(true)}
+          icon={Upload}
+        >
+          {t('videos.uploadBtn')}
+        </Button>
       </div>
 
       {/* Video Grid */}
@@ -294,16 +279,14 @@ export default function VideoGallery({
           <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto leading-relaxed">
             {t('videos.emptyDesc')}
           </p>
-          {canUpload && (
-            <div className="mt-4">
-              <Button
-                onClick={() => setShowUploadModal(true)}
-                icon={Upload}
-              >
-                {t('videos.uploadFirstBtn')}
-              </Button>
-            </div>
-          )}
+          <div className="mt-4">
+            <Button
+              onClick={() => setShowUploadModal(true)}
+              icon={Upload}
+            >
+              {t('videos.uploadFirstBtn')}
+            </Button>
+          </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

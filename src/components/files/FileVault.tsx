@@ -23,20 +23,15 @@ import {
   validateUploadFile,
 } from '@/lib/upload/client-uploader';
 import { useToast } from '@/components/ui/Toast';
-import {
-  canUpload as canUserUpload,
-  canDeleteMedia,
-} from '@/lib/permissions';
 import { useLocale } from '@/i18n/useLocale';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Tooltip } from '@/components/ui/Tooltip';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 interface FileVaultProps {
   files: FileRecord[];
   tasks: Task[];
-  userRole: ProjectRole;
+  userRole?: ProjectRole;
   currentUserId: string;
   projectId: string;
   onAddFile: (newFile: FileRecord) => void;
@@ -46,7 +41,6 @@ interface FileVaultProps {
 export default function FileVault({
   files,
   tasks,
-  userRole,
   currentUserId,
   projectId,
   onAddFile,
@@ -67,9 +61,6 @@ export default function FileVault({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const canUpload = canUserUpload(userRole);
-  const canDelete = canDeleteMedia(userRole);
 
   const folderTabs = [
     { id: 'ALL', label: t('files.folderAll') },
@@ -290,23 +281,12 @@ export default function FileVault({
           </p>
         </div>
 
-        {canUpload ? (
-          <Button
-            onClick={() => setShowUploadModal(true)}
-            icon={Upload}
-          >
-            {t('files.uploadBtn')}
-          </Button>
-        ) : (
-          <Tooltip content={t('files.viewerNoUpload')}>
-            <Button
-              disabled
-              icon={Upload}
-            >
-              {t('files.uploadBtn')}
-            </Button>
-          </Tooltip>
-        )}
+        <Button
+          onClick={() => setShowUploadModal(true)}
+          icon={Upload}
+        >
+          {t('files.uploadBtn')}
+        </Button>
       </div>
 
       {/* Folder Tabs */}
@@ -340,16 +320,14 @@ export default function FileVault({
               <p className="mt-1 text-[var(--color-text-muted)] max-w-sm mx-auto leading-relaxed">
                 {t('files.emptyDesc')}
               </p>
-              {canUpload && (
-                <div className="mt-4">
-                  <Button
-                    onClick={() => setShowUploadModal(true)}
-                    icon={Upload}
-                  >
-                    {t('files.uploadFirstBtn')}
-                  </Button>
-                </div>
-              )}
+              <div className="mt-4">
+                <Button
+                  onClick={() => setShowUploadModal(true)}
+                  icon={Upload}
+                >
+                  {t('files.uploadFirstBtn')}
+                </Button>
+              </div>
             </div>
           ) : (
             filteredFiles.map((file) => {
@@ -401,7 +379,7 @@ export default function FileVault({
                       {t('files.download')}
                     </Button>
 
-                    {canDelete && onDeleteFile && (
+                    {onDeleteFile && (
                       <button
                         type="button"
                         onClick={() => setFileToDelete(file)}
