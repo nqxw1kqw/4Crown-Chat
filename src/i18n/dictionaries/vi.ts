@@ -1,6 +1,6 @@
 export const vi = {
   // Navigation
-  'nav.brand': 'Game Team Hub',
+  'nav.brand': '4Crow(n)-Chat',
   'nav.version': 'v0.1',
   'nav.dashboard': 'Tổng quan',
   'nav.tasks': 'Công việc',

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import TaskList from '@/components/tasks/TaskList';
@@ -24,6 +24,12 @@ import { Task, GameplayVideo, FileRecord } from '@/types/database';
 
 type BootStep = 'language' | 'loading' | 'identity' | 'app';
 
+const STORAGE_KEYS = {
+  tasks: '4crown.tasks',
+  videos: '4crown.videos',
+  files: '4crown.files',
+};
+
 export default function Home() {
   const isMounted = useIsMounted();
   const profile = useLocalProfile();
@@ -34,10 +40,36 @@ export default function Home() {
 
   const [currentTab, setCurrentTab] = useState('dashboard');
 
-  // Application state (Khởi tạo trạng thái trống theo yêu cầu của Shin)
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [videos, setVideos] = useState<GameplayVideo[]>([]);
-  const [files, setFiles] = useState<FileRecord[]>([]);
+  // Application state (Tải từ localStorage và đồng bộ R2/DB)
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedTasks = localStorage.getItem(STORAGE_KEYS.tasks);
+      return savedTasks ? JSON.parse(savedTasks) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [videos, setVideos] = useState<GameplayVideo[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedVideos = localStorage.getItem(STORAGE_KEYS.videos);
+      return savedVideos ? JSON.parse(savedVideos) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [files, setFiles] = useState<FileRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const savedFiles = localStorage.getItem(STORAGE_KEYS.files);
+      return savedFiles ? JSON.parse(savedFiles) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Selected item navigation states
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -45,14 +77,74 @@ export default function Home() {
 
   const currentProject = {
     id: DEFAULT_PROJECT_ID,
-    name: 'Game Team Project',
+    name: '4Crow(n)-Chat',
   };
+
+  // 1. Tự động đồng bộ và nạp lại toàn bộ dữ liệu từ R2 & DB
+  useEffect(() => {
+
+    const syncAll = async () => {
+      try {
+        const [resVideos, resFiles, resTasks] = await Promise.allSettled([
+          fetch('/api/videos'),
+          fetch('/api/files'),
+          fetch('/api/tasks'),
+        ]);
+
+        if (resVideos.status === 'fulfilled' && resVideos.value.ok) {
+          const vData = await resVideos.value.json();
+          if (vData.videos) {
+            setVideos(vData.videos);
+            try {
+              localStorage.setItem(STORAGE_KEYS.videos, JSON.stringify(vData.videos));
+            } catch {}
+          }
+        }
+
+        if (resFiles.status === 'fulfilled' && resFiles.value.ok) {
+          const fData = await resFiles.value.json();
+          if (fData.files) {
+            setFiles(fData.files);
+            try {
+              localStorage.setItem(STORAGE_KEYS.files, JSON.stringify(fData.files));
+            } catch {}
+          }
+        }
+
+        if (resTasks.status === 'fulfilled' && resTasks.value.ok) {
+          const tData = await resTasks.value.json();
+          if (tData.tasks && tData.tasks.length > 0) {
+            setTasks(tData.tasks);
+            try {
+              localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(tData.tasks));
+            } catch {}
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Lỗi đồng bộ dữ liệu từ API:', syncErr);
+      }
+    };
+
+    syncAll();
+  }, []);
 
   // Task actions
   const handleUpdateTask = (taskId: string, updated: Partial<Task>) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, ...updated, updated_at: new Date().toISOString() } : t))
-    );
+    setTasks((prev) => {
+      const next = prev.map((t) =>
+        t.id === taskId ? { ...t, ...updated, updated_at: new Date().toISOString() } : t
+      );
+      try {
+        localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    fetch('/api/tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId, ...updated }),
+    }).catch(() => {});
   };
 
   const handleCreateTask = (newTaskData: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => {
@@ -63,29 +155,88 @@ export default function Home() {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    setTasks((prev) => [newTask, ...prev]);
+    setTasks((prev) => {
+      const next = [newTask, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTask),
+    }).catch(() => {});
   };
 
   const handleDeleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setTasks((prev) => {
+      const next = prev.filter((t) => t.id !== taskId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.tasks, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    fetch(`/api/tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' }).catch(() => {});
   };
 
   // Video actions
   const handleAddVideo = (newVid: GameplayVideo) => {
-    setVideos((prev) => [newVid, ...prev]);
+    setVideos((prev) => {
+      const next = [newVid, ...prev.filter((v) => v.id !== newVid.id && v.file_key !== newVid.file_key)];
+      try {
+        localStorage.setItem(STORAGE_KEYS.videos, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleDeleteVideo = (videoId: string) => {
-    setVideos((prev) => prev.filter((v) => v.id !== videoId));
+    const target = videos.find((v) => v.id === videoId);
+    setVideos((prev) => {
+      const next = prev.filter((v) => v.id !== videoId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.videos, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    if (target) {
+      fetch(
+        `/api/videos?id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(target.file_key)}&thumbnailKey=${encodeURIComponent(target.thumbnail_key || '')}`,
+        { method: 'DELETE' }
+      ).catch(() => {});
+    }
   };
 
   // File actions
   const handleAddFile = (newFile: FileRecord) => {
-    setFiles((prev) => [newFile, ...prev]);
+    setFiles((prev) => {
+      const next = [newFile, ...prev.filter((f) => f.id !== newFile.id && f.file_key !== newFile.file_key)];
+      try {
+        localStorage.setItem(STORAGE_KEYS.files, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleDeleteFile = (fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    const target = files.find((f) => f.id === fileId);
+    setFiles((prev) => {
+      const next = prev.filter((f) => f.id !== fileId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.files, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    if (target) {
+      fetch(`/api/files?id=${encodeURIComponent(fileId)}&key=${encodeURIComponent(target.file_key)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    }
   };
 
   // Boot transitions

@@ -6,6 +6,8 @@ import {
   AbortMultipartUploadCommand,
   GetObjectCommand,
   PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectCommand,
   CompletedPart,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -173,4 +175,35 @@ export async function getPresignedThumbnailPutUrl(
   });
 
   return await getSignedUrl(s3, command, { expiresIn: expiresInSeconds });
+}
+
+/**
+ * 8. Liệt kê danh sách các objects trong R2 bucket theo prefix
+ */
+export async function listR2Objects(prefix?: string) {
+  const s3 = getR2Client();
+  const bucket = getR2BucketName();
+
+  const command = new ListObjectsV2Command({
+    Bucket: bucket,
+    Prefix: prefix || undefined,
+  });
+
+  const response = await s3.send(command);
+  return response.Contents || [];
+}
+
+/**
+ * 9. Xóa một object khỏi R2 bucket
+ */
+export async function deleteR2Object(key: string) {
+  const s3 = getR2Client();
+  const bucket = getR2BucketName();
+
+  const command = new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  return await s3.send(command);
 }

@@ -43,5 +43,13 @@ export const TASK_PRIORITY_CONFIG = {
 
 // Hằng số mặc định cho MVP testing
 export const DEFAULT_PROJECT_ID = 'proj-1';
+export const DEFAULT_PROJECT_UUID = '00000000-0000-0000-0000-000000000001';
 export const DEFAULT_USER_ID = 'user-shin';
+
+export function toProjectUuid(id?: string | null): string {
+  if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    return id;
+  }
+  return DEFAULT_PROJECT_UUID;
+}
 

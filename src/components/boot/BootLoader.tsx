@@ -92,9 +92,6 @@ export default function BootLoader({
             <h1 className="text-2xl font-extrabold text-[var(--color-text)] tracking-tight">
               {t('nav.brand')}
             </h1>
-            <span className="inline-block mt-1 rounded bg-[var(--color-accent)]/20 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
-              {t('nav.version')}
-            </span>
           </div>
         </div>
 

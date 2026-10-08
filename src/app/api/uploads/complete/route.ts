@@ -3,6 +3,7 @@ import { verifyProjectAccess } from '@/lib/auth-helpers';
 import { completeMultipartUpload } from '@/lib/r2/client';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { UploadKind } from '@/types/database';
+import { toProjectUuid } from '@/lib/constants';
 
 interface CompletedPartItem {
   PartNumber: number;
@@ -59,6 +60,25 @@ export async function POST(req: NextRequest) {
       .update({ status: 'completed' })
       .eq('r2_upload_id', uploadId);
 
+    const projectUuid = toProjectUuid(projectId);
+    const isUuid = (val?: string | null) =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val));
+    const safeUserId = isUuid(user.id) ? user.id : null;
+
+    // Đảm bảo project row tồn tại
+    try {
+      await supabase.from('projects').upsert(
+        {
+          id: projectUuid,
+          name: 'Game Team Project',
+          status: 'active',
+        },
+        { onConflict: 'id' }
+      );
+    } catch {
+      // Ignore if cannot upsert project
+    }
+
     let insertedRecord = null;
 
     // 4. Ghi bản ghi vào bảng tương ứng
@@ -67,7 +87,7 @@ export async function POST(req: NextRequest) {
         const { data, error } = await supabase
           .from('gameplay_videos')
           .insert({
-            project_id: projectId,
+            project_id: projectUuid,
             version: metadata?.version || '1.0',
             title: metadata?.title || metadata?.filename || 'Gameplay Video',
             description: metadata?.description || '',
@@ -75,7 +95,7 @@ export async function POST(req: NextRequest) {
             thumbnail_key: metadata?.thumbnailKey || null,
             duration: metadata?.duration || 0,
             size: size || 0,
-            uploaded_by: user.id,
+            uploaded_by: safeUserId,
           })
           .select()
           .single();
@@ -96,7 +116,7 @@ export async function POST(req: NextRequest) {
             created_at: new Date().toISOString(),
           };
         } else {
-          insertedRecord = data;
+          insertedRecord = { ...data, project_id: projectId };
         }
       } catch (dbErr) {
         console.warn('Ngoại lệ khi lưu video metadata (chế độ demo):', dbErr);
@@ -120,13 +140,13 @@ export async function POST(req: NextRequest) {
         const { data, error } = await supabase
           .from('files')
           .insert({
-            project_id: projectId,
+            project_id: projectUuid,
             folder: metadata?.folder || (kind === 'build' ? 'builds' : 'general'),
             name: metadata?.filename || 'File',
             file_key: key,
             size: size || 0,
             mime: metadata?.mime || 'application/octet-stream',
-            uploaded_by: user.id,
+            uploaded_by: safeUserId,
             linked_task_id: metadata?.linkedTaskId || null,
           })
           .select()
@@ -147,7 +167,7 @@ export async function POST(req: NextRequest) {
             created_at: new Date().toISOString(),
           };
         } else {
-          insertedRecord = data;
+          insertedRecord = { ...data, project_id: projectId };
         }
       } catch (dbErr) {
         console.warn('Ngoại lệ khi lưu file metadata (chế độ demo):', dbErr);

@@ -16,7 +16,7 @@ const notoSansJP = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: 'Game Team Hub - MVP v0.1',
+  title: '4Crow(n)-Chat',
   description: 'Hệ thống quản lý task, video gameplay và lưu trữ file build cho Game Studio',
 };
 

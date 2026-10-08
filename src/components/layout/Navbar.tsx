@@ -71,9 +71,6 @@ export default function Navbar({
                 <span className="text-base font-bold text-[var(--color-text)] tracking-tight">
                   {t('nav.brand')}
                 </span>
-                <span className="rounded bg-[var(--color-accent)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-300">
-                  {t('nav.version')}
-                </span>
               </div>
               <div className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
                 <span className="font-medium text-[var(--color-text)] truncate max-w-[140px] sm:max-w-[200px]">

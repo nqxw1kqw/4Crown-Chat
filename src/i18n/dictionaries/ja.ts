@@ -2,7 +2,7 @@ import { TranslationKey } from './vi';
 
 export const ja: Record<TranslationKey, string> = {
   // Navigation
-  'nav.brand': 'Game Team Hub',
+  'nav.brand': '4Crow(n)-Chat',
   'nav.version': 'v0.1',
   'nav.dashboard': 'ダッシュボード',
   'nav.tasks': 'タスク',
