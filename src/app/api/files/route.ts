@@ -158,9 +158,15 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = await createServerSupabaseClient();
 
-    // 1. Xóa trong database nếu có id
+    let actualKey = key;
+
+    // 1. Xóa trong database nếu có id (lấy file_key trước khi xóa)
     if (id) {
       try {
+        const { data } = await supabase.from('files').select('file_key').eq('id', id).single();
+        if (data?.file_key) {
+          actualKey = data.file_key;
+        }
         await supabase.from('files').delete().eq('id', id);
       } catch (err) {
         console.warn('Lỗi xóa file trong DB:', err);
@@ -168,9 +174,9 @@ export async function DELETE(req: NextRequest) {
     }
 
     // 2. Xóa file trên Cloudflare R2
-    if (key) {
+    if (actualKey) {
       try {
-        await deleteR2Object(key);
+        await deleteR2Object(actualKey);
       } catch (r2Err) {
         console.warn('Lỗi xóa file trên R2:', r2Err);
       }

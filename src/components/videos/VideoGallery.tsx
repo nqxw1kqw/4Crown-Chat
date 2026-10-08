@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Clock,
   Zap,
+  User,
 } from 'lucide-react';
 import { GameplayVideo, ProjectRole } from '@/types/database';
 import {
@@ -26,6 +27,7 @@ import { useLocale } from '@/i18n/useLocale';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import VideoPlayerModal from './VideoPlayerModal';
+import { getSlotDisplayName } from '@/lib/profile';
 
 interface VideoGalleryProps {
   videos: GameplayVideo[];
@@ -36,6 +38,7 @@ interface VideoGalleryProps {
   onDeleteVideo?: (videoId: string) => void;
   selectedVideo?: GameplayVideo | null;
   onClearSelectedVideo?: () => void;
+  profileNames?: Record<string, string>;
 }
 
 export default function VideoGallery({
@@ -47,6 +50,7 @@ export default function VideoGallery({
   onDeleteVideo,
   selectedVideo,
   onClearSelectedVideo,
+  profileNames = {},
 }: VideoGalleryProps) {
   const { t, formatBytes, formatDuration, formatDate } = useLocale();
   const { success, error: toastError, warning } = useToast();
@@ -344,9 +348,16 @@ export default function VideoGallery({
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)]">
-                  <span>{formatBytes(vid.size)}</span>
-                  <span>{formatDate(vid.created_at)}</span>
+                <div className="flex items-center justify-between pt-3 mt-3 border-t border-[var(--color-border)] text-[11px] text-[var(--color-text-muted)] gap-2">
+                  <span className="flex items-center gap-1 font-medium text-[var(--color-text)] truncate max-w-[130px]">
+                    <User className="h-3 w-3 text-indigo-400 shrink-0" />
+                    {getSlotDisplayName(vid.uploaded_by, profileNames, t('assignee.unknown'))}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span>{formatBytes(vid.size)}</span>
+                    <span>•</span>
+                    <span>{formatDate(vid.created_at)}</span>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -364,6 +375,7 @@ export default function VideoGallery({
           }}
           userRole={userRole}
           onDeleteVideo={onDeleteVideo}
+          profileNames={profileNames}
         />
       )}
 

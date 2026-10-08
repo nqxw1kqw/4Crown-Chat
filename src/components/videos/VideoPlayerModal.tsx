@@ -1,23 +1,26 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertTriangle, RefreshCw, Trash2 } from 'lucide-react';
+import { X, AlertTriangle, RefreshCw, Trash2, User } from 'lucide-react';
 import { GameplayVideo, ProjectRole } from '@/types/database';
 import { useLocale } from '@/i18n/useLocale';
 import { Button } from '@/components/ui/Button';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { getSlotDisplayName } from '@/lib/profile';
 
 interface VideoPlayerModalProps {
   video: GameplayVideo;
   onClose: () => void;
   userRole?: ProjectRole;
   onDeleteVideo?: (videoId: string) => void;
+  profileNames?: Record<string, string>;
 }
 
 export default function VideoPlayerModal({
   video,
   onClose,
   onDeleteVideo,
+  profileNames = {},
 }: VideoPlayerModalProps) {
   const { t, formatBytes, formatDuration, formatDate } = useLocale();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -170,7 +173,7 @@ export default function VideoPlayerModal({
             </p>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs text-[var(--color-text-muted)]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs text-[var(--color-text-muted)]">
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
               <span className="text-[11px] text-[var(--color-text-muted)] block mb-1">{t('videos.duration')}</span>
               <span className="font-mono font-bold text-[var(--color-text)]">
@@ -189,8 +192,16 @@ export default function VideoPlayerModal({
             </div>
 
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+              <span className="text-[11px] text-[var(--color-text-muted)] block mb-1">{t('videos.uploader')}</span>
+              <span className="font-medium text-[var(--color-text)] flex items-center gap-1.5 truncate">
+                <User className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                {getSlotDisplayName(video.uploaded_by, profileNames, t('assignee.unknown'))}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
               <span className="text-[11px] text-[var(--color-text-muted)] block mb-1">{t('videos.storage')}</span>
-              <span className="font-medium text-[var(--color-success)]">{t('videos.storageValue')}</span>
+              <span className="font-medium text-[var(--color-success)] truncate">{t('videos.storageValue')}</span>
             </div>
           </div>
 

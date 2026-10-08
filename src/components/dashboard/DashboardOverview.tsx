@@ -17,6 +17,7 @@ import { useLocale } from '@/i18n/useLocale';
 import { Card } from '@/components/ui/Card';
 import { StatusBadge, PriorityBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { getSlotDisplayName } from '@/lib/profile';
 
 interface DashboardOverviewProps {
   tasks: Task[];
@@ -27,6 +28,7 @@ interface DashboardOverviewProps {
   onSelectTask: (task: Task) => void;
   onSelectVideo: (video: GameplayVideo) => void;
   onNavigateTab: (tab: string) => void;
+  profileNames?: Record<string, string>;
 }
 
 export default function DashboardOverview({
@@ -37,6 +39,7 @@ export default function DashboardOverview({
   onSelectTask,
   onSelectVideo,
   onNavigateTab,
+  profileNames = {},
 }: DashboardOverviewProps) {
   const { t, formatDate, formatBytes, formatDuration, formatNumber, isOverdue } = useLocale();
 
@@ -392,8 +395,15 @@ export default function DashboardOverview({
                           {video.title}
                         </p>
                       </div>
-                      <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                        {formatBytes(video.size)} • {formatDate(video.created_at)}
+                      <div className="text-[11px] text-[var(--color-text-muted)] mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="flex items-center gap-1 font-medium text-[var(--color-text)]">
+                          <User className="h-3 w-3 text-indigo-400 shrink-0" />
+                          {getSlotDisplayName(video.uploaded_by, profileNames, t('assignee.unknown'))}
+                        </span>
+                        <span>•</span>
+                        <span>{formatBytes(video.size)}</span>
+                        <span>•</span>
+                        <span>{formatDate(video.created_at)}</span>
                       </div>
                     </div>
                   </div>
@@ -436,8 +446,17 @@ export default function DashboardOverview({
                   >
                     <div className="min-w-0 pr-2">
                       <p className="font-medium text-[var(--color-text)] truncate">{file.name}</p>
-                      <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                        <span className="uppercase text-indigo-400 font-mono font-semibold">{file.folder}</span> • {formatBytes(file.size)} • {formatDate(file.created_at)}
+                      <div className="text-[11px] text-[var(--color-text-muted)] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="uppercase text-indigo-400 font-mono font-semibold">{file.folder}</span>
+                        <span>•</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-[var(--color-text)]">
+                          <User className="h-3 w-3 text-indigo-400 shrink-0" />
+                          {getSlotDisplayName(file.uploaded_by, profileNames, t('assignee.unknown'))}
+                        </span>
+                        <span>•</span>
+                        <span>{formatBytes(file.size)}</span>
+                        <span>•</span>
+                        <span>{formatDate(file.created_at)}</span>
                       </div>
                     </div>
                   </div>

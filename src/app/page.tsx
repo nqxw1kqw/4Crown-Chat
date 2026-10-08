@@ -325,6 +325,7 @@ export default function Home() {
                       setCurrentTab('videos');
                     }}
                     onNavigateTab={(tab) => setCurrentTab(tab)}
+                    profileNames={profile.names}
                   />
                 )}
 
@@ -350,6 +351,7 @@ export default function Home() {
                     onDeleteVideo={handleDeleteVideo}
                     selectedVideo={selectedVideo}
                     onClearSelectedVideo={() => setSelectedVideo(null)}
+                    profileNames={profile.names}
                   />
                 )}
 
@@ -361,6 +363,7 @@ export default function Home() {
                     projectId={currentProject.id}
                     onAddFile={handleAddFile}
                     onDeleteFile={handleDeleteFile}
+                    profileNames={profile.names}
                   />
                 )}
               </main>

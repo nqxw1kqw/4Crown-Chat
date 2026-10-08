@@ -145,6 +145,7 @@ export const vi = {
   'videos.duration': 'Thời lượng',
   'videos.fileSize': 'Dung lượng file',
   'videos.uploadDate': 'Ngày tải lên',
+  'videos.uploader': 'Người tải',
   'videos.storage': 'Quyền lưu trữ',
   'videos.storageValue': 'Cloudflare R2 (Private)',
 
@@ -173,6 +174,7 @@ export const vi = {
   'files.uploadFirstBtn': 'Tải lên File đầu tiên',
   'files.download': 'Tải về',
   'files.delete': 'Xóa file',
+  'files.uploader': 'Người tải',
   'files.deleteAria': 'Xóa file {name}',
   'files.downloadAria': 'Tải về file {name}',
   'files.uploadModalTitle': 'Tải lên File / Game Build (Tối đa 10GB)',

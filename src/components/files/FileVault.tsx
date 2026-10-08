@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Zap,
   Clock,
+  User,
 } from 'lucide-react';
 import { FileRecord, ProjectRole, Task, UploadKind } from '@/types/database';
 import {
@@ -27,6 +28,7 @@ import { useLocale } from '@/i18n/useLocale';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { getSlotDisplayName } from '@/lib/profile';
 
 interface FileVaultProps {
   files: FileRecord[];
@@ -36,6 +38,7 @@ interface FileVaultProps {
   projectId: string;
   onAddFile: (newFile: FileRecord) => void;
   onDeleteFile?: (fileId: string) => void;
+  profileNames?: Record<string, string>;
 }
 
 export default function FileVault({
@@ -45,6 +48,7 @@ export default function FileVault({
   projectId,
   onAddFile,
   onDeleteFile,
+  profileNames = {},
 }: FileVaultProps) {
   const { t, formatBytes, formatDate } = useLocale();
   const { success, error: toastError, warning } = useToast();
@@ -355,6 +359,11 @@ export default function FileVault({
                         <span>{formatBytes(file.size)}</span>
                         <span>•</span>
                         <span>{formatDate(file.created_at)}</span>
+                        <span>•</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-[var(--color-text)]">
+                          <User className="h-3 w-3 text-indigo-400 shrink-0" />
+                          {getSlotDisplayName(file.uploaded_by, profileNames, t('assignee.unknown'))}
+                        </span>
 
                         {linkedTask && (
                           <>

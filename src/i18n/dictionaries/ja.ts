@@ -147,6 +147,7 @@ export const ja: Record<TranslationKey, string> = {
   'videos.duration': '再生時間',
   'videos.fileSize': 'ファイルサイズ',
   'videos.uploadDate': '登録日',
+  'videos.uploader': '投稿者',
   'videos.storage': 'ストレージ',
   'videos.storageValue': 'Cloudflare R2（プライベート）',
 
@@ -175,6 +176,7 @@ export const ja: Record<TranslationKey, string> = {
   'files.uploadFirstBtn': '最初のファイルをアップロード',
   'files.download': 'ダウンロード',
   'files.delete': 'ファイルを削除',
+  'files.uploader': 'アップロード者',
   'files.deleteAria': 'ファイル「{name}」を削除',
   'files.downloadAria': 'ファイル「{name}」をダウンロード',
   'files.uploadModalTitle': 'ファイル／ビルドのアップロード（最大10GB）',

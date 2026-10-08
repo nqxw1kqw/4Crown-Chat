@@ -4,6 +4,7 @@ import {
   listR2Objects,
   deleteR2Object,
   getPresignedVideoGetUrl,
+  getR2BucketName,
 } from '@/lib/r2/client';
 import { DEFAULT_PROJECT_ID, toProjectUuid } from '@/lib/constants';
 import { GameplayVideo } from '@/types/database';
@@ -167,28 +168,53 @@ export async function DELETE(req: NextRequest) {
 
     const supabase = await createServerSupabaseClient();
 
-    // 1. Xóa trong database nếu có id
+    let actualFileKey = key;
+    let actualThumbKey = thumbnailKey;
+
+    // 1. Lấy thông tin bản ghi từ DB trước khi xóa để có đúng key gốc trên R2
     if (id) {
       try {
+        const { data } = await supabase
+          .from('gameplay_videos')
+          .select('file_key, thumbnail_key')
+          .eq('id', id)
+          .single();
+        if (data) {
+          if (data.file_key) actualFileKey = data.file_key;
+          if (data.thumbnail_key) actualThumbKey = data.thumbnail_key;
+        }
         await supabase.from('gameplay_videos').delete().eq('id', id);
       } catch (err) {
         console.warn('Lỗi xóa video trong DB:', err);
       }
     }
 
-    // 2. Xóa file trên Cloudflare R2
-    if (key) {
+    // 2. Xóa video trên Cloudflare R2
+    if (actualFileKey) {
       try {
-        await deleteR2Object(key);
+        await deleteR2Object(actualFileKey);
       } catch (r2Err) {
         console.warn('Lỗi xóa video trên R2:', r2Err);
       }
     }
 
     // 3. Xóa thumbnail trên R2 nếu có
-    if (thumbnailKey && !thumbnailKey.startsWith('http') && !thumbnailKey.startsWith('data:')) {
+    if (actualThumbKey) {
       try {
-        await deleteR2Object(thumbnailKey);
+        let cleanThumb = actualThumbKey;
+        if (cleanThumb.startsWith('http')) {
+          const u = new URL(cleanThumb);
+          const bucket = getR2BucketName();
+          const p = u.pathname.replace(/^\//, '');
+          if (p.startsWith(`${bucket}/`)) {
+            cleanThumb = p.substring(bucket.length + 1);
+          } else {
+            cleanThumb = p;
+          }
+        }
+        if (!cleanThumb.startsWith('data:')) {
+          await deleteR2Object(cleanThumb);
+        }
       } catch (thumbErr) {
         console.warn('Lỗi xóa thumbnail trên R2:', thumbErr);
       }
