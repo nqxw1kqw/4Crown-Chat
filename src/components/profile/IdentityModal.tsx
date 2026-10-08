@@ -1,197 +1,176 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UserCheck, ShieldCheck, Check, Sparkles } from 'lucide-react';
+import { Check, KeyRound, Loader2, ArrowRight } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
-import { SlotId, SLOT_IDS, LocalProfileState, saveStoredProfile } from '@/lib/profile';
-import { ProjectRole } from '@/types/database';
-import { Button } from '@/components/ui/Button';
+import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
+import { useAppData } from '@/components/providers/AppDataProvider';
+import { ApiClientError } from '@/lib/api-client';
+import { Button } from '@/components/ui/button';
+import { FieldInput } from '@/components/common/form';
+import MemberAvatar from '@/components/common/member-avatar';
 
-interface IdentityModalProps {
-  isOpen: boolean;
-  currentProfile: LocalProfileState;
-  onSelectIdentity: (updated: LocalProfileState) => void;
-}
-
-const ROLE_OPTIONS: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
-
-const ROLE_BADGE_COLORS: Record<ProjectRole, string> = {
-  OWNER: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
-  ADMIN: 'border-indigo-500/40 text-indigo-300 bg-indigo-500/10',
-  MEMBER: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
-  VIEWER: 'border-zinc-500/40 text-zinc-300 bg-zinc-500/10',
-};
-
-export default function IdentityModal({
-  isOpen,
-  currentProfile,
-  onSelectIdentity,
-}: IdentityModalProps) {
+export default function IdentityModal() {
   const { locale, setLocale, t } = useLocale();
-  const [selectedSlot, setSelectedSlot] = useState<SlotId | null>(currentProfile.currentSlotId || 'm1');
-  const [selectedRole, setSelectedRole] = useState<ProjectRole>(currentProfile.role || 'ADMIN');
+  const { login } = useAppData();
 
-  if (!isOpen) return null;
+  const [selectedSlot, setSelectedSlot] = useState<SlotId>('m1');
+  const [passcode, setPasscode] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleConfirm = () => {
-    if (!selectedSlot) return;
-    const updated: LocalProfileState = {
-      ...currentProfile,
-      currentSlotId: selectedSlot,
-      role: selectedRole,
-    };
-    saveStoredProfile(updated);
-    onSelectIdentity(updated);
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitting) return;
+
+    setSubmitting(true);
+    setErrorMessage(null);
+    try {
+      await login(selectedSlot, passcode);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 429) {
+        setErrorMessage(t('identity.errorRateLimited'));
+      } else if (err instanceof ApiClientError && err.status === 401) {
+        setErrorMessage(t('identity.errorInvalid'));
+      } else if (err instanceof ApiClientError && err.code === 'unconfigured') {
+        setErrorMessage(t('boot.errorUnconfigured'));
+      } else {
+        setErrorMessage(t('boot.errorGeneric'));
+      }
+      setSubmitting(false);
+    }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-[#091E42]/50 p-4 backdrop-blur-md fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="identity-modal-title"
     >
-      <div className="relative w-full max-w-xl flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden p-6 sm:p-8 space-y-6">
-        {/* Language switch toggle (đổi ngôn ngữ trực tiếp tại màn identity) */}
+      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-xl sm:p-8">
         <div
-          className="absolute top-4 right-4 flex items-center rounded-xl bg-[var(--color-surface)] border border-[var(--color-border-strong)] p-1 text-xs"
+          className="absolute top-4 right-4 flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
           role="group"
           aria-label={t('nav.languageSwitch')}
         >
-          <button
-            type="button"
-            onClick={() => setLocale('vi')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              locale === 'vi'
-                ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
-                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-            }`}
-            aria-pressed={locale === 'vi'}
-            title="Tiếng Việt"
-          >
-            VI
-          </button>
-          <button
-            type="button"
-            onClick={() => setLocale('ja')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-              locale === 'ja'
-                ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
-                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-            }`}
-            aria-pressed={locale === 'ja'}
-            title="日本語"
-          >
-            JA
-          </button>
+          {(['vi', 'ja'] as const).map((lang) => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => setLocale(lang)}
+              className={`cursor-pointer rounded px-2.5 py-1 font-medium transition-colors ${
+                locale === lang
+                  ? 'bg-[var(--color-brand)] text-white'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              aria-pressed={locale === lang}
+              title={lang === 'vi' ? 'Tiếng Việt' : '日本語'}
+            >
+              {lang.toUpperCase()}
+            </button>
+          ))}
         </div>
 
-        {/* Header */}
-        <div className="text-center space-y-2 pt-2 sm:pt-0">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/20 mb-1">
-            <UserCheck className="h-6 w-6" />
-          </div>
-          <h2 id="identity-modal-title" className="text-xl sm:text-2xl font-bold text-[var(--color-text)] tracking-tight">
+        <div className="flex flex-col items-center gap-2 pt-2 text-center sm:pt-0">
+          <MemberAvatar slot={selectedSlot} name={DEFAULT_SLOT_NAMES[selectedSlot]} size="lg" />
+          <h2
+            id="identity-modal-title"
+            className="text-lg font-semibold tracking-tight text-[var(--color-text)] sm:text-xl"
+          >
             {t('identity.pickTitle')}
           </h2>
-          <p className="text-xs sm:text-sm text-[var(--color-text-muted)] max-w-md mx-auto leading-relaxed">
+          <p className="max-w-md text-[13px] leading-relaxed text-[var(--color-text-muted)]">
             {t('identity.pickDescription')}
           </p>
         </div>
 
-        {/* Slot Selection Grid (4 slots) */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block">
-            {t('profile.currentSlot')}
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {SLOT_IDS.map((slotId) => {
-              const name = currentProfile.names[slotId];
-              const isSelected = selectedSlot === slotId;
-              return (
-                <button
-                  key={slotId}
-                  type="button"
-                  onClick={() => setSelectedSlot(slotId)}
-                  className={`flex items-center justify-between p-3.5 rounded-xl border text-left transition-all duration-150 cursor-pointer ${
-                    isSelected
-                      ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 shadow-md shadow-indigo-950/30 ring-1 ring-[var(--color-accent)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)]'
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  <div className="min-w-0 pr-2">
-                    <span className="text-[10px] font-mono font-bold text-indigo-400 block mb-0.5">
-                      {t('profile.slotLabel', { slot: slotId.toUpperCase() })}
-                    </span>
-                    <span className="text-sm font-bold text-[var(--color-text)] truncate block">
-                      {name}
-                    </span>
-                  </div>
-                  <div
-                    className={`h-5 w-5 rounded-full flex items-center justify-center border transition-colors shrink-0 ${
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <span className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+              {t('profile.currentSlot')}
+            </span>
+            <div className="grid grid-cols-2 gap-3">
+              {SLOT_IDS.map((slotId) => {
+                const isSelected = selectedSlot === slotId;
+                return (
+                  <button
+                    key={slotId}
+                    type="button"
+                    onClick={() => setSelectedSlot(slotId)}
+                    aria-pressed={isSelected}
+                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand)]/50 ${
                       isSelected
-                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white'
-                        : 'border-[var(--color-border-strong)] bg-transparent'
+                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface)]'
                     }`}
                   >
-                    {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Role Selection */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block">
-            {t('identity.selectRole')}
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {ROLE_OPTIONS.map((role) => {
-              const isSelected = selectedRole === role;
-              return (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => setSelectedRole(role)}
-                  className={`flex flex-col p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer ${
-                    isSelected
-                      ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10 ring-1 ring-[var(--color-accent)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)]'
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md border ${ROLE_BADGE_COLORS[role]}`}>
-                      {t(`role.${role}` as Parameters<typeof t>[0])}
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <MemberAvatar slot={slotId} name={DEFAULT_SLOT_NAMES[slotId]} size="sm" />
+                      <div className="min-w-0">
+                        <span className="mb-0.5 block font-mono text-[10px] font-semibold text-[var(--color-brand)]">
+                          {t('profile.slotLabel', { slot: slotId.toUpperCase() })}
+                        </span>
+                        <span className="block truncate text-[13px] font-semibold text-[var(--color-text)]">
+                          {DEFAULT_SLOT_NAMES[slotId]}
+                        </span>
+                      </div>
+                    </div>
+                    <span
+                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                        isSelected
+                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white'
+                          : 'border-[var(--color-border-strong)] text-transparent'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <Check className="size-3 stroke-[3]" />
                     </span>
-                    {isSelected && <ShieldCheck className="h-4 w-4 text-indigo-400" />}
-                  </div>
-                  <p className="text-[11px] text-[var(--color-text-muted)] line-clamp-2">
-                    {t(`role.desc.${role}` as unknown as Parameters<typeof t>[0])}
-                  </p>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="pt-2">
+          <FieldInput
+            id="team-passcode"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            label={t('identity.passcodeLabel')}
+            placeholder={t('identity.passcodePlaceholder')}
+            className="text-sm"
+          />
+          <p className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)]">
+            <KeyRound className="size-3.5" />
+            {t('identity.passcodeHint')}
+          </p>
+
+          {errorMessage && (
+            <p
+              role="alert"
+              className="rounded-md border border-[var(--color-danger)]/25 bg-[var(--color-danger-soft)] px-3 py-2 text-xs font-medium text-[var(--color-danger)]"
+            >
+              {errorMessage}
+            </p>
+          )}
+
           <Button
-            type="button"
-            variant="primary"
+            type="submit"
             size="lg"
-            className="w-full justify-center text-sm font-bold py-3.5"
-            onClick={handleConfirm}
-            disabled={!selectedSlot}
-            icon={Sparkles}
+            className="w-full justify-center"
+            disabled={submitting || !passcode}
           >
-            {t('identity.start')}
+            {submitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ArrowRight className="size-4" />
+            )}
+            {submitting ? t('identity.loggingIn') : t('identity.start')}
           </Button>
-        </div>
+        </form>
       </div>
     </div>
   );

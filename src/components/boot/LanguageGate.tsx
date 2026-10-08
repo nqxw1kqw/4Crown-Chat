@@ -4,7 +4,7 @@ import React from 'react';
 import { Gamepad2, ArrowRight, Check } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { Locale } from '@/i18n/config';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@/components/ui/button';
 
 interface LanguageGateProps {
   onContinue: () => void;
@@ -36,6 +36,12 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
     setLocale(lang);
   };
 
+  // Chọn "Tiếp tục" cũng là chốt ngôn ngữ, để lần tải trang sau khỏi hỏi lại.
+  const handleContinue = () => {
+    setLocale(locale);
+    onContinue();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent, lang: Locale) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
@@ -45,36 +51,32 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[var(--color-bg)] transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-bg)] p-4 transition-opacity duration-200 sm:p-6"
       role="region"
       aria-label={t('boot.language.title')}
     >
-      <div className="w-full max-w-lg flex flex-col items-center text-center space-y-8 animate-in fade-in zoom-in-95 duration-200">
-        {/* Brand Logo & Header */}
+      <div className="flex w-full max-w-lg animate-in fade-in zoom-in-95 flex-col items-center gap-8 text-center duration-200">
+        {/* Brand logo & header */}
         <div className="space-y-3">
           <div
-            className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-xl shadow-indigo-500/25"
+            className="inline-flex size-14 items-center justify-center rounded-lg bg-[var(--color-brand)] text-white"
             aria-hidden="true"
           >
-            <Gamepad2 className="h-8 w-8" />
+            <Gamepad2 className="size-7" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)] tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text)]">
               {t('nav.brand')}
             </h1>
-            <p className="mt-1.5 text-xs sm:text-sm text-[var(--color-text-muted)] max-w-sm mx-auto leading-relaxed">
+            <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed text-[var(--color-text-muted)]">
               {t('boot.language.subtitle')}
             </p>
           </div>
         </div>
 
-        {/* Language Selection Radiogroup */}
-        <div
-          className="w-full space-y-3"
-          role="radiogroup"
-          aria-label={t('boot.language.title')}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        {/* Language selection radiogroup */}
+        <div className="w-full" role="radiogroup" aria-label={t('boot.language.title')}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {LANGUAGE_OPTIONS.map((item) => {
               const isSelected = locale === item.id;
               return (
@@ -86,30 +88,30 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
                   tabIndex={0}
                   onClick={() => handleSelectLanguage(item.id)}
                   onKeyDown={(e) => handleKeyDown(e, item.id)}
-                  className={`group relative flex items-center justify-between p-4 sm:p-5 rounded-2xl border text-left transition-all duration-150 min-h-[56px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
+                  className={`group flex min-h-14 cursor-pointer items-center justify-between rounded-md border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand)]/50 ${
                     isSelected
-                      ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 shadow-lg shadow-indigo-950/20 ring-1 ring-[var(--color-accent)]'
-                      : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)]'
+                      ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)]'
+                      : 'border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface)]'
                   }`}
                 >
                   <div className="min-w-0 pr-3">
-                    <span className="block text-base sm:text-lg font-bold text-[var(--color-text)] group-hover:text-indigo-300 transition-colors">
+                    <span className="block text-sm font-semibold text-[var(--color-text)]">
                       {item.nativeName}
                     </span>
-                    <span className="block text-xs text-[var(--color-text-muted)] mt-0.5 font-medium">
+                    <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
                       {item.subName}
                     </span>
                   </div>
 
                   <div
-                    className={`h-6 w-6 rounded-full flex items-center justify-center border transition-all shrink-0 ${
+                    className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
                       isSelected
-                        ? 'bg-[var(--color-accent)] border-[var(--color-accent)] text-white shadow-sm'
-                        : 'border-[var(--color-border-strong)] bg-transparent text-transparent'
+                        ? 'border-[var(--color-brand)] bg-[var(--color-brand)] text-white'
+                        : 'border-[var(--color-border-strong)] text-transparent'
                     }`}
                     aria-hidden="true"
                   >
-                    <Check className={`h-3.5 w-3.5 stroke-[3] ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+                    <Check className="size-3 stroke-[3]" />
                   </div>
                 </button>
               );
@@ -117,17 +119,16 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="w-full pt-2">
+        {/* Action button */}
+        <div className="w-full">
           <Button
             type="button"
-            variant="primary"
             size="lg"
-            onClick={onContinue}
-            className="w-full justify-center text-sm sm:text-base font-bold py-3.5 sm:py-4 shadow-lg shadow-indigo-600/20 min-h-[48px]"
-            icon={ArrowRight}
+            onClick={handleContinue}
+            className="w-full justify-center"
           >
             {t('boot.language.continue')}
+            <ArrowRight className="size-4" />
           </Button>
         </div>
       </div>

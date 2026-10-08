@@ -30,6 +30,16 @@ export interface LocaleContextValue {
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
+/** Client-only: người dùng đã từng chọn ngôn ngữ trên máy này chưa. */
+export function hasStoredLocale(): boolean {
+  try {
+    const saved = localStorage.getItem(LOCALE_STORAGE_KEY) as Locale | null;
+    return !!saved && (LOCALES as readonly string[]).includes(saved);
+  } catch {
+    return false;
+  }
+}
+
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 

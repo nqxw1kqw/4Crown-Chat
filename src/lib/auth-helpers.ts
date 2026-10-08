@@ -1,65 +1,89 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { ProjectRole } from '@/types/database';
-import { DEFAULT_USER_ID } from '@/lib/constants';
+import { getSession, type SessionPayload } from '@/lib/session';
+import { ApiError, dbError } from '@/lib/api';
+import { db } from '@/lib/data';
+import { PROJECT_ID } from '@/lib/constants';
+import { atLeast, ROLE_RANK } from '@/lib/permissions';
+import type { ProjectRole } from '@/types/database';
 
-export interface AuthContext {
-  user: {
-    id: string;
-    email?: string;
-  };
-  role: ProjectRole;
+/**
+ * Mọi route API đều phải đi qua đây. Không còn chế độ demo fallback:
+ * trước đó hàm này luôn trả về OWNER khi thiếu phiên đăng nhập, khiến
+ * /api/uploads/init và các route ký URL R2 mở toang cho người lạ.
+ */
+export async function requireSession(): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!session) {
+    throw new ApiError(401, 'unauthorized');
+  }
+  return session;
 }
 
 /**
- * Kiểm tra xác thực người dùng và vai trò thành viên trong project.
- * Hỗ trợ chế độ Demo / MVP khi chưa có phiên đăng nhập Supabase Auth.
+ * Vai trò thật trong `project_members`. Cookie chỉ là ảnh chụp lúc đăng nhập,
+ * nên sau khi OWNER đổi vai trò thì phải đọc lại DB mới có hiệu lực ngay.
  */
-export async function verifyProjectAccess(
-  projectId: string,
-  minRoles: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
-): Promise<AuthContext> {
-  try {
-    const supabase = await createServerSupabaseClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+export async function currentRole(session: SessionPayload): Promise<ProjectRole> {
+  const { data, error } = await db()
+    .from('project_members')
+    .select('role')
+    .eq('project_id', PROJECT_ID)
+    .eq('user_id', session.userId)
+    .maybeSingle();
 
-    // 1. Nếu có phiên đăng nhập Supabase Auth thật
-    if (!authError && user) {
-      const { data: membership, error: memberError } = await supabase
-        .from('project_members')
-        .select('role')
-        .eq('project_id', projectId)
-        .eq('user_id', user.id)
-        .single();
+  if (error) throw dbError(error);
+  const role = data?.role as ProjectRole | undefined;
+  // Slot đã bị Chủ dự án xoá khỏi team -> mất tư cách ghi dù cookie còn hạn.
+  if (!role || !(role in ROLE_RANK)) throw new ApiError(403, 'forbidden', 'not-a-member');
+  return role;
+}
 
-      if (!memberError && membership) {
-        const userRole = membership.role as ProjectRole;
+export interface Principal {
+  session: SessionPayload;
+  role: ProjectRole;
+}
 
-        if (!minRoles.includes(userRole)) {
-          throw new Error('Bạn không có quyền thực hiện thao tác này trong dự án');
-        }
+async function principal(minimum: ProjectRole): Promise<Principal> {
+  const session = await requireSession();
+  const role = await currentRole(session);
+  if (!atLeast(role, minimum)) throw new ApiError(403, 'forbidden');
+  return { session, role };
+}
 
-        return {
-          user: {
-            id: user.id,
-            email: user.email,
-          },
-          role: userRole,
-        };
-      }
-    }
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('không có quyền')) {
-      throw err;
-    }
-    // Gặp lỗi kết nối Supabase hoặc thiếu auth thì fallback sang demo
+/** VIEWER chỉ được đọc; mọi thao tác ghi đều phải qua hàm này. */
+export function requireContributor(): Promise<Principal> {
+  return principal('MEMBER');
+}
+
+export function requireAtLeast(minimum: ProjectRole): Promise<Principal> {
+  return principal(minimum);
+}
+
+/** OWNER/ADMIN chạm được mọi task; MEMBER chỉ task mình tạo hoặc được giao. */
+export async function requireTaskWrite(
+  task: { creator_id: string | null; assignee_id: string | null }
+): Promise<Principal> {
+  const { session, role } = await principal('MEMBER');
+  if (atLeast(role, 'ADMIN')) return { session, role };
+  if (task.creator_id !== session.userId && task.assignee_id !== session.userId) {
+    throw new ApiError(403, 'forbidden');
   }
+  return { session, role };
+}
 
-  // 2. Chế độ Demo / MVP fallback (mặc định Katsuragi Shin - OWNER)
-  return {
-    user: {
-      id: DEFAULT_USER_ID,
-      email: 'shin@gameteam.local',
-    },
-    role: 'OWNER',
-  };
+/** Xóa task: chỉ người tạo hoặc OWNER/ADMIN. */
+export async function requireTaskDelete(task: { creator_id: string | null }): Promise<Principal> {
+  const { session, role } = await principal('MEMBER');
+  if (!atLeast(role, 'ADMIN') && task.creator_id !== session.userId) {
+    throw new ApiError(403, 'forbidden');
+  }
+  return { session, role };
+}
+
+/** File/video trong kho: người tải lên hoặc OWNER/ADMIN. */
+export async function requireRecordManager(uploadedBy: string | null): Promise<Principal> {
+  const { session, role } = await principal('MEMBER');
+  if (!atLeast(role, 'ADMIN') && uploadedBy !== session.userId) {
+    throw new ApiError(403, 'forbidden');
+  }
+  return { session, role };
 }

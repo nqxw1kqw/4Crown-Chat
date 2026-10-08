@@ -1,34 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyProjectAccess } from '@/lib/auth-helpers';
+import { requireSession } from '@/lib/auth-helpers';
+import { toErrorResponse } from '@/lib/api';
+import { markUploadStatus, requireOwnedUpload } from '@/lib/data';
 import { abortMultipartUpload } from '@/lib/r2/client';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { projectId, uploadId, key } = body as {
-      projectId: string;
-      uploadId: string;
-      key: string;
-    };
+    const session = await requireSession();
+    const body = (await req.json().catch(() => null)) as { uploadId?: unknown } | null;
 
-    if (!projectId || !uploadId || !key) {
-      return NextResponse.json({ error: 'Thiếu thông số bắt buộc' }, { status: 400 });
-    }
-
-    await verifyProjectAccess(projectId, ['OWNER', 'ADMIN', 'MEMBER']);
-
-    await abortMultipartUpload(key, uploadId);
-
-    const supabase = await createServerSupabaseClient();
-    await supabase
-      .from('uploads')
-      .update({ status: 'aborted' })
-      .eq('r2_upload_id', uploadId);
+    const upload = await requireOwnedUpload(body?.uploadId, session.userId);
+    await abortMultipartUpload(upload.key, upload.r2_upload_id);
+    await markUploadStatus(upload.r2_upload_id, 'aborted');
 
     return NextResponse.json({ success: true });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Lỗi hệ thống';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    return toErrorResponse(err);
   }
 }

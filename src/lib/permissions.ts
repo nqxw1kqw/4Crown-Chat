@@ -1,30 +1,50 @@
-// Đã bỏ phân quyền theo yêu cầu Vòng 3. Vai trò chỉ là nhãn hiển thị cho đồng đội biết.
-// Mọi thao tác tạo, sửa, xóa, tải lên đều luôn được cho phép.
+import type { ProjectRole } from '@/types/database';
 
-export function canCreateTask(): boolean {
-  return true;
+export const ROLE_RANK: Record<ProjectRole, number> = {
+  VIEWER: 0,
+  MEMBER: 1,
+  ADMIN: 2,
+  OWNER: 3,
+};
+
+export function atLeast(role: ProjectRole, minimum: ProjectRole): boolean {
+  return ROLE_RANK[role] >= ROLE_RANK[minimum];
 }
 
-export function canEditTask(): boolean {
-  return true;
+/**
+ * Cùng bộ điều kiện với các require* trong src/lib/auth-helpers.ts:
+ * UI chỉ ẩn nút khi API chắc chắn sẽ trả 403.
+ */
+export interface Permissions {
+  contribute: boolean;
+  editTask: (task: { creator_id: string | null; assignee_id: string | null }) => boolean;
+  deleteTask: (task: { creator_id: string | null }) => boolean;
+  manageRecord: (uploadedBy: string | null) => boolean;
+  /** ADMIN+: đổi tên thành viên và xoá bình luận của người khác. */
+  manageTeam: boolean;
+  /** OWNER: đổi vai trò, thêm/bỏ slot. */
+  manageRoles: boolean;
 }
 
-export function canDeleteTask(): boolean {
-  return true;
+export function permissionsFor(role: ProjectRole, userId: string): Permissions {
+  const manager = atLeast(role, 'ADMIN');
+  const writable = atLeast(role, 'MEMBER');
+  return {
+    contribute: writable,
+    editTask: (task) => manager || (writable && (task.creator_id === userId || task.assignee_id === userId)),
+    deleteTask: (task) => manager || (writable && task.creator_id === userId),
+    manageRecord: (uploadedBy) => manager || (writable && uploadedBy === userId),
+    manageTeam: manager,
+    manageRoles: role === 'OWNER',
+  };
 }
 
-export function canUpload(): boolean {
-  return true;
-}
-
-export function canDeleteMedia(): boolean {
-  return true;
-}
-
-export function canManageMembers(): boolean {
-  return true;
-}
-
-export function canDeleteProject(): boolean {
-  return true;
-}
+/** Trạng thái trước khi đăng nhập: mọi khối UI có nút ghi đều bị ẩn. */
+export const READ_ONLY: Permissions = {
+  contribute: false,
+  editTask: () => false,
+  deleteTask: () => false,
+  manageRecord: () => false,
+  manageTeam: false,
+  manageRoles: false,
+};

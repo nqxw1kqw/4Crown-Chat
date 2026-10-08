@@ -6,25 +6,30 @@ import {
   AbortMultipartUploadCommand,
   GetObjectCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
   CompletedPart,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let cachedR2Client: S3Client | null = null;
 
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+}
+
 export function getR2Client(): S3Client {
   if (cachedR2Client) return cachedR2Client;
 
-  const accountId = process.env.R2_ACCOUNT_ID || 'dummy-account-id';
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID || 'dummy-access-key';
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || 'dummy-secret-key';
+  const accountId = requiredEnv('R2_ACCOUNT_ID');
 
   cachedR2Client = new S3Client({
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId,
-      secretAccessKey,
+      accessKeyId: requiredEnv('R2_ACCESS_KEY_ID'),
+      secretAccessKey: requiredEnv('R2_SECRET_ACCESS_KEY'),
     },
   });
 
@@ -32,7 +37,18 @@ export function getR2Client(): S3Client {
 }
 
 export function getR2BucketName(): string {
-  return process.env.R2_BUCKET_NAME || 'game-team-hub-bucket';
+  return requiredEnv('R2_BUCKET_NAME');
+}
+
+/**
+ * Chốt object key vào đúng prefix của project. Mọi key đi ra khỏi hàm này
+ * đều đã được kiểm tra, không nhận key do client tự nghĩ ra.
+ */
+export function assertProjectKey(key: unknown, projectId: string): string {
+  if (typeof key !== 'string' || !key.startsWith(`projects/${projectId}/`) || key.includes('..')) {
+    throw new Error(`Object key outside project scope: ${String(key)}`);
+  }
+  return key;
 }
 
 /**
@@ -173,4 +189,16 @@ export async function getPresignedThumbnailPutUrl(
   });
 
   return await getSignedUrl(s3, command, { expiresIn: expiresInSeconds });
+}
+
+/**
+ * 8. Xóa object thật trên R2 khi bản ghi bị gỡ, tránh rác chiếm dung lượng
+ */
+export async function deleteObject(key: string): Promise<void> {
+  await getR2Client().send(
+    new DeleteObjectCommand({
+      Bucket: getR2BucketName(),
+      Key: key,
+    })
+  );
 }

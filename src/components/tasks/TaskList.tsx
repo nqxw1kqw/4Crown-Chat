@@ -1,649 +1,454 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
+  CalendarDays,
+  Filter,
+  Kanban,
   Plus,
   Search,
-  Calendar,
-  User,
-  ArrowRight,
-  ListTodo,
-  LayoutList,
-  Kanban,
-  GripVertical,
+  Table2,
+  Timer,
   X,
 } from 'lucide-react';
-import { Task, TaskStatus, TaskPriority } from '@/types/database';
-import { TASK_STATUS_CONFIG, TASK_PRIORITY_CONFIG, DEFAULT_PROJECT_ID } from '@/lib/constants';
+import type { LucideIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { FieldInput, FieldSelect, FieldTextarea, ToolbarSelect } from '@/components/common/form';
+
+import TaskDetailModal from './TaskDetailModal';
+import TaskTable from './views/task-table';
+import TaskKanban from './views/task-kanban';
+import TaskTimeline from './views/task-timeline';
+import TaskCalendar from './views/task-calendar';
+import { compareTasks, isTaskView, STATUS_ORDER, type TaskSort, type TaskView } from './task-view-utils';
+import { ApiClientError, isStaleError } from '@/lib/api-client';
+import { TASK_PRIORITY_CONFIG, TASK_TAGS } from '@/lib/constants';
+import type { TaskTag } from '@/lib/constants';
+import { useAppData } from '@/components/providers/AppDataProvider';
 import { useToast } from '@/components/ui/Toast';
 import { useLocale } from '@/i18n/useLocale';
-import { TranslationKey } from '@/i18n/dictionaries/vi';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { PriorityBadge } from '@/components/ui/Badge';
-import { SlotId, SLOT_IDS, getSlotDisplayName } from '@/lib/profile';
-import TaskDetailModal from './TaskDetailModal';
+import type { TranslationKey } from '@/i18n/dictionaries/vi';
+import type { TaskPriority, TaskStatus } from '@/types/database';
 
-interface TaskListProps {
-  tasks: Task[];
-  profileNames: Record<SlotId, string>;
-  currentSlotId: SlotId | null;
-  onUpdateTask: (taskId: string, updated: Partial<Task>) => void;
-  onCreateTask: (newTask: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => void;
-  onDeleteTask?: (taskId: string) => void;
-  selectedTaskId?: string | null;
-  onClearSelectedTaskId?: () => void;
-}
+const VIEW_MODE_KEY = 'task_view_mode';
 
-const STATUS_GROUPS: { status: TaskStatus; countColor: string }[] = [
-  { status: 'TODO', countColor: 'text-[var(--color-text-muted)] bg-[var(--color-surface-raised)]' },
-  { status: 'IN_PROGRESS', countColor: 'text-[var(--color-info)] bg-blue-500/10' },
-  { status: 'REVIEW', countColor: 'text-[var(--color-warning)] bg-amber-500/10' },
-  { status: 'DONE', countColor: 'text-[var(--color-success)] bg-emerald-500/10' },
-  { status: 'BLOCKED', countColor: 'text-[var(--color-danger)] bg-rose-500/10' },
+const VIEW_OPTIONS: { value: TaskView; labelKey: TranslationKey; icon: LucideIcon }[] = [
+  { value: 'table', labelKey: 'tasks.viewTable', icon: Table2 },
+  { value: 'kanban', labelKey: 'tasks.viewKanban', icon: Kanban },
+  { value: 'timeline', labelKey: 'tasks.viewTimeline', icon: Timer },
+  { value: 'calendar', labelKey: 'tasks.viewCalendar', icon: CalendarDays },
 ];
 
-export default function TaskList({
-  tasks,
-  profileNames,
-  currentSlotId,
-  onUpdateTask,
-  onCreateTask,
-  onDeleteTask,
-  selectedTaskId,
-  onClearSelectedTaskId,
-}: TaskListProps) {
-  const { t, formatDate, isOverdue } = useLocale();
-  const { success, error } = useToast();
-  const [filterAssignee, setFilterAssignee] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
-  const [activeModalTask, setActiveModalTask] = useState<Task | null>(
-    selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) || null : null
-  );
-  const [showCreateModal, setShowCreateModal] = useState(false);
+const PRIORITY_ORDER: TaskPriority[] = ['CRITICAL', 'HIGH', 'NORMAL', 'LOW'];
 
-  // Form state cho tạo task mới
+function readStoredView(fallback: TaskView): TaskView {
+  try {
+    const saved = localStorage.getItem(VIEW_MODE_KEY);
+    return isTaskView(saved) ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+interface TaskListProps {
+  selectedTaskId?: string;
+  initialView?: TaskView;
+  openCreate?: boolean;
+}
+
+export default function TaskList({ selectedTaskId, initialView, openCreate = false }: TaskListProps) {
+  const { t } = useLocale();
+  const { success, error } = useToast();
+  const router = useRouter();
+  const { tasks, members, session, can, createTask, updateTask } = useAppData();
+
+  const [view, setView] = useState<TaskView>(() => (typeof window === 'undefined' ? initialView ?? 'table' : readStoredView(initialView ?? 'table')));
+  const [filterAssignee, setFilterAssignee] = useState('ALL');
+  const [filterTag, setFilterTag] = useState<'ALL' | TaskTag>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | TaskStatus>('ALL');
+  const [sort, setSort] = useState<TaskSort>('deadline');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(openCreate);
+
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newStatus, setNewStatus] = useState<TaskStatus>('TODO');
   const [newPriority, setNewPriority] = useState<TaskPriority>('NORMAL');
-  const [newAssigneeId, setNewAssigneeId] = useState<string>(currentSlotId || '');
+  const [newTag, setNewTag] = useState<TaskTag | ''>('');
+  const [newAssigneeId, setNewAssigneeId] = useState(session?.userId ?? '');
   const [newDeadline, setNewDeadline] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  // Đọc tùy chọn chế độ hiển thị từ localStorage
-  useEffect(() => {
+  // Nút "Tạo task" trên header điều hướng tới /tasks?new=1. Đổi state ngay khi render
+  // (không qua effect) theo pattern "adjusting state when props change" của React.
+  const [createRequested, setCreateRequested] = useState(openCreate);
+  if (openCreate !== createRequested) {
+    setCreateRequested(openCreate);
+    setShowCreateModal(openCreate);
+  }
+
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) ?? null : null),
+    [selectedTaskId, tasks]
+  );
+
+  const changeView = (next: TaskView) => {
+    setView(next);
     try {
-      const saved = localStorage.getItem('task_view_mode');
-      if (saved === 'kanban' || saved === 'list') {
-        const timer = setTimeout(() => {
-          setViewMode(saved);
-        }, 0);
-        return () => clearTimeout(timer);
+      localStorage.setItem(VIEW_MODE_KEY, next);
+    } catch {
+      // storage có thể bị chặn
+    }
+  };
+
+  const filtersActive = filterAssignee !== 'ALL' || filterTag !== 'ALL' || filterStatus !== 'ALL' || !!searchQuery.trim();
+
+  const visibleTasks = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matched = tasks.filter((task) => {
+      if (filterAssignee === 'MINE') {
+        if (task.assignee_id !== session?.userId) return false;
+      } else if (filterAssignee === 'UNASSIGNED') {
+        if (task.assignee_id) return false;
+      } else if (filterAssignee !== 'ALL' && task.assignee_id !== filterAssignee) {
+        return false;
       }
-    } catch {
-      // Bỏ qua lỗi truy cập localStorage
-    }
-  }, []);
-
-  // Lắng nghe phím Esc để đóng modal tạo task
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showCreateModal) {
-        setShowCreateModal(false);
+      if (filterTag !== 'ALL' && task.tag !== filterTag) return false;
+      if (filterStatus !== 'ALL' && task.status !== filterStatus) return false;
+      if (query) {
+        const inTitle = task.title.toLowerCase().includes(query);
+        const inDescription = task.description?.toLowerCase().includes(query);
+        if (!inTitle && !inDescription) return false;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCreateModal]);
-
-  const handleToggleViewMode = (mode: 'list' | 'kanban') => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem('task_view_mode', mode);
-    } catch {
-      // Bỏ qua lỗi
-    }
-  };
-
-  // Lọc task theo người phụ trách và từ khóa tìm kiếm
-  const filteredTasks = tasks.filter((task) => {
-    if (filterAssignee === 'MINE') {
-      if (task.assignee_id !== currentSlotId) return false;
-    } else if (filterAssignee === 'UNASSIGNED') {
-      if (task.assignee_id) return false;
-    } else if (filterAssignee !== 'ALL') {
-      if (task.assignee_id !== filterAssignee) return false;
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = task.title.toLowerCase().includes(q);
-      const matchDesc = task.description?.toLowerCase().includes(q);
-      if (!matchTitle && !matchDesc) return false;
-    }
-    return true;
-  });
-
-  // Optimistic update khi thay đổi trạng thái
-  const handleQuickStatusChange = (task: Task, nextStatus: TaskStatus) => {
-    if (task.status === nextStatus) return;
-    const oldStatus = task.status;
-    const statusLabel = t(`status.${nextStatus}` as TranslationKey);
-    try {
-      onUpdateTask(task.id, { status: nextStatus });
-      success(
-        t('tasks.statusUpdatedTitle'),
-        t('tasks.statusUpdatedMsg', { title: task.title, status: statusLabel })
-      );
-    } catch {
-      onUpdateTask(task.id, { status: oldStatus });
-      error(t('tasks.statusUpdateFailed'), t('tasks.statusRollbackMsg'));
-    }
-  };
-
-  // Kéo thả Kanban (Drag and Drop - Luôn cho phép mọi người)
-  const handleDragStart = (e: React.DragEvent, taskId: string) => {
-    e.dataTransfer.setData('text/plain', taskId);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, targetStatus: TaskStatus) => {
-    e.preventDefault();
-    const taskId = e.dataTransfer.getData('text/plain');
-    const targetTask = tasks.find((t) => t.id === taskId);
-    if (!targetTask) return;
-
-    handleQuickStatusChange(targetTask, targetStatus);
-  };
-
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim()) return;
-
-    onCreateTask({
-      project_id: tasks[0]?.project_id || DEFAULT_PROJECT_ID,
-      title: newTitle.trim(),
-      description: newDescription.trim(),
-      status: newStatus,
-      priority: newPriority,
-      assignee_id: newAssigneeId || null,
-      creator_id: currentSlotId || 'm1',
-      progress: 0,
-      deadline: newDeadline ? new Date(newDeadline).toISOString() : null,
-      checklist: [],
+      return true;
     });
 
-    success(t('tasks.taskCreatedTitle'), t('tasks.taskCreatedMsg', { title: newTitle.trim() }));
+    if (sort === 'priority') {
+      return matched.sort((a, b) => PRIORITY_ORDER.indexOf(a.priority) - PRIORITY_ORDER.indexOf(b.priority) || compareTasks(a, b));
+    }
+    if (sort === 'updated') {
+      return matched.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    }
+    return matched.sort(compareTasks);
+  }, [tasks, filterAssignee, filterTag, filterStatus, searchQuery, sort, session?.userId]);
 
-    setNewTitle('');
-    setNewDescription('');
-    setNewStatus('TODO');
-    setNewPriority('NORMAL');
-    setNewAssigneeId(currentSlotId || '');
-    setNewDeadline('');
-    setShowCreateModal(false);
+  const openTask = (taskId: string) => router.push(`/tasks/${taskId}`);
+  const closeTask = () => router.push('/tasks');
+
+  const handleStatusChange = async (taskId: string, nextStatus: TaskStatus, title: string) => {
+    try {
+      await updateTask(taskId, { status: nextStatus });
+      success(t('tasks.statusUpdatedTitle'), t('tasks.statusUpdatedMsg', { title, status: t(`status.${nextStatus}` as TranslationKey) }));
+    } catch (err) {
+      error(
+        t('tasks.statusUpdateFailed'),
+        isStaleError(err)
+          ? t('tasks.staleReloadedMsg')
+          : `${err instanceof ApiClientError ? t(`apiError.${err.code}` as TranslationKey) : t('apiError.system')} ${t('tasks.statusRollbackMsg')}`
+      );
+    }
   };
 
-  const formatTaskAssignee = (assigneeId?: string | null) => {
-    if (!assigneeId) return t('assignee.unassigned');
-    return getSlotDisplayName(assigneeId, profileNames, t('assignee.unknown'));
+  const handleCreateSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = newTitle.trim();
+    if (!title || creating) return;
+
+    setCreating(true);
+    try {
+      const created = await createTask({
+        title,
+        description: newDescription.trim() || null,
+        status: newStatus,
+        priority: newPriority,
+        tag: newTag || null,
+        assignee_id: newAssigneeId || null,
+        deadline: newDeadline ? new Date(newDeadline).toISOString() : null,
+      });
+
+      success(t('tasks.taskCreatedTitle'), t('tasks.taskCreatedMsg', { title: created.title }));
+      setShowCreateModal(false);
+      if (openCreate) router.replace('/tasks');
+      setNewTitle('');
+      setNewDescription('');
+      setNewStatus('TODO');
+      setNewPriority('NORMAL');
+      setNewTag('');
+      setNewAssigneeId(session?.userId ?? '');
+      setNewDeadline('');
+    } catch (err) {
+      error(
+        t('tasks.createFailedTitle'),
+        err instanceof ApiClientError ? t(`apiError.${err.code}` as TranslationKey) : t('apiError.system')
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setFilterAssignee('ALL');
+    setFilterTag('ALL');
+    setFilterStatus('ALL');
+    setSearchQuery('');
+  };
+
+  const viewProps = {
+    tasks: visibleTasks,
+    members,
+    canEditTask: can.editTask,
+    onOpenTask: openTask,
+    onStatusChange: (taskId: string, status: TaskStatus, title: string) => void handleStatusChange(taskId, status, title),
   };
 
   return (
-    <div className="space-y-6">
-      {/* Action Bar: Search, Filter, Mode Toggle & Create Button */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        <div className="flex flex-1 flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--color-text-muted)]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('tasks.searchPlaceholder')}
-              aria-label={t('tasks.searchAria')}
-              className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] pl-9 pr-4 py-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-            />
-          </div>
-
-          {/* Assignee Filter (Lấy từ 4 slot cố định) */}
-          <div className="relative">
-            <select
-              value={filterAssignee}
-              onChange={(e) => setFilterAssignee(e.target.value)}
-              aria-label={t('tasks.filterAssigneeAria')}
-              className="rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-            >
-              <option value="ALL">{t('tasks.allAssignees')}</option>
-              {currentSlotId && (
-                <option value="MINE">★ {profileNames[currentSlotId]} ({t('tasks.filterMine')})</option>
-              )}
-              {SLOT_IDS.map((slotId) => (
-                <option key={slotId} value={slotId}>
-                  {profileNames[slotId]} ({slotId.toUpperCase()})
-                </option>
-              ))}
-              <option value="UNASSIGNED">{t('assignee.unassigned')}</option>
-            </select>
-          </div>
-
-          {/* Toggle Chế độ hiển thị Danh sách / Kanban */}
-          <div className="flex items-center bg-[var(--color-surface)] border border-[var(--color-border-strong)] rounded-xl p-1 gap-1">
-            <button
-              type="button"
-              onClick={() => handleToggleViewMode('list')}
-              aria-label={t('tasks.viewList')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
-                viewMode === 'list'
-                  ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              <LayoutList className="h-3.5 w-3.5" />
-              <span>{t('tasks.viewList')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleToggleViewMode('kanban')}
-              aria-label={t('tasks.viewKanban')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer ${
-                viewMode === 'kanban'
-                  ? 'bg-[var(--color-accent)] text-white shadow-sm font-semibold'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-              }`}
-            >
-              <Kanban className="h-3.5 w-3.5" />
-              <span>{t('tasks.viewKanban')}</span>
-            </button>
-          </div>
+    <div className="space-y-4">
+      {/* Page header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold tracking-tight text-[var(--color-text)]">{t('nav.tasks')}</h1>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-muted)]">
+            <span>{t('tasks.showingCount', { shown: visibleTasks.length, total: tasks.length })}</span>
+            <span aria-hidden="true">·</span>
+            <span>{t('tasks.dragHint')}</span>
+          </p>
         </div>
 
-        {/* Create Task Button (Luôn bật cho mọi thành viên) */}
-        <div className="shrink-0">
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            icon={Plus}
-          >
-            {t('tasks.createTask')}
-          </Button>
+        {/* View switcher */}
+        <div className="flex items-center gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-1" role="group" aria-label={t('tasks.viewAria')}>
+          {VIEW_OPTIONS.map((option) => {
+            const Icon = option.icon;
+            const active = view === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => changeView(option.value)}
+                aria-pressed={active}
+                className={
+                  active
+                    ? 'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-bg)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-brand)] shadow-xs'
+                    : 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] cursor-pointer'
+                }
+              >
+                <Icon className="size-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">{t(option.labelKey)}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Trạng thái trống (Empty State) */}
-      {filteredTasks.length === 0 && (
-        <Card className="flex flex-col items-center justify-center p-12 text-center">
-          <div className="h-12 w-12 rounded-2xl bg-[var(--color-surface-raised)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] mb-3">
-            <ListTodo className="h-6 w-6" />
-          </div>
-          <h3 className="text-sm font-bold text-[var(--color-text)] mb-1">
-            {t('tasks.emptyTitle')}
-          </h3>
-          <p className="text-xs text-[var(--color-text-muted)] max-w-sm mb-4">
-            {t('tasks.emptyDescription')}
-          </p>
-          <Button
-            size="sm"
-            onClick={() => setShowCreateModal(true)}
-            icon={Plus}
-          >
-            {t('tasks.createTask')}
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[150px] max-w-xs flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={t('tasks.searchPlaceholder')}
+            aria-label={t('tasks.searchAria')}
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+
+        {can.contribute && (
+          <Button size="sm" onClick={() => setShowCreateModal(true)} className="order-2 shrink-0 lg:order-3">
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">{t('tasks.createTaskShort')}</span>
           </Button>
-        </Card>
-      )}
+        )}
 
-      {/* Chế độ Bảng Kanban (5 Cột) */}
-      {viewMode === 'kanban' && tasks.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start">
-          {STATUS_GROUPS.map((group) => {
-            const groupTasks = filteredTasks.filter((t) => t.status === group.status);
-            const statusTitle = t(`status.${group.status}` as TranslationKey);
+        <div className="order-3 grid w-full grid-cols-2 gap-2 md:grid-cols-4 lg:order-2 lg:flex lg:w-auto lg:flex-1">
+          <ToolbarSelect
+            value={filterAssignee}
+            onChange={(event) => setFilterAssignee(event.target.value)}
+            aria-label={t('tasks.filterAssigneeAria')}
+            className="w-full min-w-0 lg:w-auto"
+          >
+            <option value="ALL">{t('tasks.allAssignees')}</option>
+            <option value="MINE">{t('tasks.filterMine')}</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.display_name}
+              </option>
+            ))}
+            <option value="UNASSIGNED">{t('assignee.unassigned')}</option>
+          </ToolbarSelect>
 
-            return (
-              <div
-                key={group.status}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, group.status)}
-                className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden shadow-sm transition-colors"
-              >
-                {/* Column Header */}
-                <div className="p-3.5 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-surface-raised)]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[var(--color-text)] uppercase tracking-wider">
-                      {statusTitle}
-                    </span>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-[var(--color-border)] ${group.countColor}`}>
-                      {groupTasks.length}
-                    </span>
-                  </div>
-                </div>
+          <ToolbarSelect
+            value={filterStatus}
+            onChange={(event) => setFilterStatus(event.target.value as 'ALL' | TaskStatus)}
+            aria-label={t('tasks.filterStatusAria')}
+            className="w-full min-w-0 lg:w-auto"
+          >
+            <option value="ALL">{t('tasks.allStatuses')}</option>
+            {STATUS_ORDER.map((status) => (
+              <option key={status} value={status}>
+                {t(`status.${status}` as TranslationKey)}
+              </option>
+            ))}
+          </ToolbarSelect>
 
-                {/* Cards Container */}
-                <div className="p-3 flex-1 space-y-3 min-h-[300px]">
-                  {groupTasks.length === 0 ? (
-                    <div className="h-32 border border-dashed border-[var(--color-border)] rounded-xl flex items-center justify-center text-xs text-[var(--color-text-muted)] text-center p-3">
-                      {t('tasks.kanbanDropPlaceholder')}
-                    </div>
-                  ) : (
-                    groupTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        draggable={true}
-                        onDragStart={(e) => handleDragStart(e, task.id)}
-                        onClick={() => setActiveModalTask(task)}
-                        className="p-3.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] hover:border-[var(--color-border-strong)] cursor-grab active:cursor-grabbing transition-all duration-150 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <PriorityBadge priority={task.priority} />
-                          <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] shrink-0" />
-                        </div>
+          <ToolbarSelect
+            value={filterTag}
+            onChange={(event) => setFilterTag(event.target.value as 'ALL' | TaskTag)}
+            aria-label={t('tasks.filterTagAria')}
+            className="w-full min-w-0 lg:w-auto"
+          >
+            <option value="ALL">{t('tasks.allTags')}</option>
+            {TASK_TAGS.map((tag) => (
+              <option key={tag} value={tag}>
+                {t(`tag.${tag}` as TranslationKey)}
+              </option>
+            ))}
+          </ToolbarSelect>
 
-                        <h4 className="text-xs font-semibold text-[var(--color-text)] mt-1.5 line-clamp-2">
-                          {task.title}
-                        </h4>
-
-                        <div className="mt-3 pt-2.5 border-t border-[var(--color-border)] flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
-                          <span className="truncate max-w-[100px]">
-                            {formatTaskAssignee(task.assignee_id)}
-                          </span>
-                          {task.deadline && (
-                            <span
-                              className={
-                                task.status !== 'DONE' && isOverdue(task.deadline, task.status)
-                                  ? 'text-[var(--color-danger)] font-semibold'
-                                  : 'text-[var(--color-text-muted)]'
-                              }
-                            >
-                              {formatDate(task.deadline)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          <ToolbarSelect
+            value={sort}
+            onChange={(event) => setSort(event.target.value as TaskSort)}
+            aria-label={t('tasks.sortAria')}
+            className="w-full min-w-0 lg:w-auto"
+          >
+            <option value="deadline">{t('tasks.sortDeadline')}</option>
+            <option value="priority">{t('tasks.sortPriority')}</option>
+            <option value="updated">{t('tasks.sortUpdated')}</option>
+          </ToolbarSelect>
         </div>
-      )}
 
-      {/* Chế độ Danh sách (List View) */}
-      {viewMode === 'list' && tasks.length > 0 && (
-        <div className="space-y-6">
-          {STATUS_GROUPS.map((group) => {
-            const groupTasks = filteredTasks.filter((t) => t.status === group.status);
-            const statusTitle = t(`status.${group.status}` as TranslationKey);
+        {filtersActive && (
+          <Button type="button" variant="ghost" size="xs" onClick={clearFilters} className="order-4 lg:order-none">
+            <X className="size-3.5" />
+            {t('tasks.clearFilters')}
+          </Button>
+        )}
+      </div>
 
-            return (
-              <Card
-                key={group.status}
-                padding="none"
-                className="overflow-hidden"
-              >
-                {/* Group Header */}
-                <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]">
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text)]">
-                      {statusTitle}
-                    </h3>
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border border-[var(--color-border)] ${group.countColor}`}>
-                      {groupTasks.length}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Group Items */}
-                <div className="divide-y divide-[var(--color-border)]">
-                  {groupTasks.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-[var(--color-text-muted)]">
-                      {t('tasks.columnEmpty')}
-                    </div>
-                  ) : (
-                    groupTasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
-                      >
-                        {/* Task Title & Details */}
-                        <div
-                          onClick={() => setActiveModalTask(task)}
-                          className="flex-1 cursor-pointer min-w-0 pr-3"
-                        >
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <PriorityBadge priority={task.priority} />
-                            <span className="text-[var(--color-text-muted)]">•</span>
-                            <h4 className="text-sm font-semibold text-[var(--color-text)] group-hover:text-indigo-300 transition-colors truncate">
-                              {task.title}
-                            </h4>
-                          </div>
-
-                          <div className="flex items-center gap-4 mt-2 text-xs text-[var(--color-text-muted)] flex-wrap">
-                            {/* Assignee */}
-                            <div className="flex items-center gap-1.5">
-                              <User className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-                              <span>{formatTaskAssignee(task.assignee_id)}</span>
-                            </div>
-
-                            {/* Deadline */}
-                            {task.deadline && (
-                              <div
-                                className={`flex items-center gap-1.5 ${
-                                  task.status !== 'DONE' && isOverdue(task.deadline, task.status)
-                                    ? 'text-[var(--color-danger)] font-semibold'
-                                    : ''
-                                }`}
-                              >
-                                <Calendar className="h-3.5 w-3.5" />
-                                <span>{formatDate(task.deadline)}</span>
-                              </div>
-                            )}
-
-                            {/* Checklist progress */}
-                            {task.checklist && task.checklist.length > 0 && (
-                              <div className="text-[11px] font-mono text-indigo-400">
-                                {task.checklist.filter((c) => c.done).length}/{task.checklist.length}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Quick Status Action Controls */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {task.status !== 'DONE' && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleQuickStatusChange(task, 'DONE');
-                              }}
-                              className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--color-border)] hover:border-emerald-500/50 hover:bg-emerald-500/10 text-emerald-400 font-medium transition-colors cursor-pointer"
-                            >
-                              {t('tasks.markDone')}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setActiveModalTask(task)}
-                            className="p-1.5 rounded-lg hover:bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-                            aria-label={t('tasks.viewDetailAria', { title: task.title })}
-                          >
-                            <ArrowRight className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Modal chi tiết Task */}
-      {activeModalTask && (
-        <TaskDetailModal
-          task={activeModalTask}
-          onClose={() => {
-            setActiveModalTask(null);
-            if (onClearSelectedTaskId) onClearSelectedTaskId();
-          }}
-          onUpdateTask={(updated) => {
-            onUpdateTask(activeModalTask.id, updated);
-            setActiveModalTask((prev) => (prev ? { ...prev, ...updated } : null));
-          }}
-          onDeleteTask={onDeleteTask}
-          profileNames={profileNames}
+      {/* Body */}
+      {tasks.length === 0 ? (
+        <EmptyState
+          icon={Filter}
+          title={t('tasks.emptyTitle')}
+          description={t('tasks.emptyDescription')}
+          action={
+            can.contribute ? (
+              <Button size="sm" onClick={() => setShowCreateModal(true)}>
+                <Plus className="size-4" />
+                {t('tasks.createTask')}
+              </Button>
+            ) : undefined
+          }
         />
+      ) : visibleTasks.length === 0 ? (
+        <EmptyState icon={Search} title={t('tasks.noMatchTitle')} description={t('tasks.clearFilters')} />
+      ) : view === 'table' ? (
+        <TaskTable {...viewProps} />
+      ) : view === 'kanban' ? (
+        <TaskKanban {...viewProps} />
+      ) : view === 'timeline' ? (
+        <TaskTimeline tasks={visibleTasks} members={members} />
+      ) : (
+        <TaskCalendar tasks={visibleTasks} onOpenTask={openTask} />
       )}
 
-      {/* Modal Tạo Task Mới */}
-      {showCreateModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-task-modal-title"
-        >
-          <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
-              <h3 id="create-task-modal-title" className="text-base font-bold text-[var(--color-text)]">
-                {t('tasks.modalCreateTitle')}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(false)}
-                aria-label={t('tasks.closeModalAria')}
-                className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+      {selectedTask && <TaskDetailModal task={selectedTask} onClose={closeTask} />}
+
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-w-xl gap-0 p-0">
+          <DialogHeader className="border-b border-[var(--color-border)] px-5 py-4 text-left">
+            <DialogTitle className="text-sm font-bold">{t('tasks.modalCreateTitle')}</DialogTitle>
+            <DialogDescription className="text-xs">{t('tasks.formDescPlaceholder')}</DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateSubmit} className="space-y-4 px-5 py-4">
+            <FieldInput
+              label={t('tasks.formTitle')}
+              required
+              maxLength={200}
+              autoFocus
+              value={newTitle}
+              onChange={(event) => setNewTitle(event.target.value)}
+              placeholder={t('tasks.formTitlePlaceholder')}
+            />
+
+            <FieldTextarea
+              label={t('tasks.formDescription')}
+              rows={3}
+              value={newDescription}
+              onChange={(event) => setNewDescription(event.target.value)}
+              placeholder={t('tasks.formDescPlaceholder')}
+            />
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <FieldSelect
+                label={t('tasks.formInitialStatus')}
+                value={newStatus}
+                onChange={(event) => setNewStatus(event.target.value as TaskStatus)}
+                options={STATUS_ORDER.map((status) => ({ value: status, label: t(`status.${status}` as TranslationKey) }))}
+              />
+              <FieldSelect
+                label={t('tasks.formPriority')}
+                value={newPriority}
+                onChange={(event) => setNewPriority(event.target.value as TaskPriority)}
+                options={Object.keys(TASK_PRIORITY_CONFIG).map((priority) => ({
+                  value: priority,
+                  label: t(`priority.${priority}` as TranslationKey),
+                }))}
+              />
+              <FieldSelect
+                label={t('tasks.formTag')}
+                value={newTag}
+                onChange={(event) => setNewTag(event.target.value as TaskTag | '')}
+                options={[
+                  { value: '', label: t('tasks.noTag') },
+                  ...TASK_TAGS.map((tag) => ({ value: tag, label: t(`tag.${tag}` as TranslationKey) })),
+                ]}
+              />
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                  {t('tasks.formTitle')}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder={t('tasks.formTitlePlaceholder')}
-                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3.5 py-2 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FieldSelect
+                label={t('tasks.formAssignee')}
+                value={newAssigneeId}
+                onChange={(event) => setNewAssigneeId(event.target.value)}
+                options={[
+                  { value: '', label: t('assignee.unassigned') },
+                  ...members.map((member) => ({ value: member.id, label: member.display_name })),
+                ]}
+              />
+              <FieldInput
+                type="date"
+                label={t('tasks.formDeadline')}
+                value={newDeadline}
+                onChange={(event) => setNewDeadline(event.target.value)}
+              />
+            </div>
 
-              <div>
-                <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                  {t('tasks.formDescription')}
-                </label>
-                <textarea
-                  rows={3}
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder={t('tasks.formDescPlaceholder')}
-                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                    {t('tasks.formInitialStatus')}
-                  </label>
-                  <select
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as TaskStatus)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                  >
-                    {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((st) => (
-                      <option key={st} value={st}>
-                        {t(`status.${st}` as TranslationKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                    {t('tasks.formPriority')}
-                  </label>
-                  <select
-                    value={newPriority}
-                    onChange={(e) => setNewPriority(e.target.value as TaskPriority)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                  >
-                    {(Object.keys(TASK_PRIORITY_CONFIG) as TaskPriority[]).map((pr) => (
-                      <option key={pr} value={pr}>
-                        {t(`priority.${pr}` as TranslationKey)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                    {t('tasks.formAssignee')}
-                  </label>
-                  <select
-                    value={newAssigneeId}
-                    onChange={(e) => setNewAssigneeId(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                  >
-                    <option value="">{t('assignee.unassigned')}</option>
-                    {SLOT_IDS.map((slotId) => (
-                      <option key={slotId} value={slotId}>
-                        {profileNames[slotId]} ({slotId.toUpperCase()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-[var(--color-text)] block mb-1.5">
-                    {t('tasks.formDeadline')}
-                  </label>
-                  <input
-                    type="date"
-                    value={newDeadline}
-                    onChange={(e) => setNewDeadline(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--color-border)]">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="sm"
-                  disabled={!newTitle.trim()}
-                  icon={Plus}
-                >
-                  {t('tasks.formSubmit')}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <DialogFooter className="gap-2 pt-1">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setShowCreateModal(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" size="sm" disabled={!newTitle.trim() || creating}>
+                <Plus className="size-4" />
+                {t('tasks.formSubmit')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

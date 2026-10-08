@@ -1,32 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyProjectAccess } from '@/lib/auth-helpers';
+import { requireSession } from '@/lib/auth-helpers';
+import { ApiError, toErrorResponse } from '@/lib/api';
+import { requireOwnedUpload } from '@/lib/data';
 import { getPresignedPartUrl } from '@/lib/r2/client';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { projectId, uploadId, key, partNumber } = body as {
-      projectId: string;
-      uploadId: string;
-      key: string;
-      partNumber: number;
-    };
+    const session = await requireSession();
 
-    if (!projectId || !uploadId || !key || !partNumber) {
-      return NextResponse.json({ error: 'Thiếu thông số bắt buộc' }, { status: 400 });
+    const body = (await req.json().catch(() => null)) as {
+      uploadId?: unknown;
+      partNumber?: unknown;
+    } | null;
+
+    const partNumber = body?.partNumber;
+    if (typeof partNumber !== 'number' || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+      throw new ApiError(400, 'invalid', 'partNumber');
     }
 
-    // Kiểm tra quyền MEMBER trở lên
-    await verifyProjectAccess(projectId, ['OWNER', 'ADMIN', 'MEMBER']);
+    const upload = await requireOwnedUpload(body?.uploadId, session.userId);
+    const url = await getPresignedPartUrl(upload.key, upload.r2_upload_id, partNumber, 3600);
 
-    const url = await getPresignedPartUrl(key, uploadId, partNumber, 3600);
-
-    return NextResponse.json({
-      partNumber,
-      url,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Lỗi hệ thống';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ partNumber, url });
+  } catch (err) {
+    return toErrorResponse(err);
   }
 }

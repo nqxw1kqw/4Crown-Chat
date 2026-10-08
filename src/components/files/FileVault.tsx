@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FileBox,
   Upload,
@@ -15,52 +15,49 @@ import {
   RefreshCw,
   Zap,
   Clock,
+  Loader2,
 } from 'lucide-react';
-import { FileRecord, ProjectRole, Task, UploadKind } from '@/types/database';
+import type { UploadKind } from '@/types/database';
 import {
   uploadLargeFileToR2,
-  UploadProgress,
   validateUploadFile,
+  type UploadProgress,
 } from '@/lib/upload/client-uploader';
+import { apiFetch, ApiClientError } from '@/lib/api-client';
+import { useAppData } from '@/components/providers/AppDataProvider';
 import { useToast } from '@/components/ui/Toast';
 import { useLocale } from '@/i18n/useLocale';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { TranslationKey } from '@/i18n/dictionaries/vi';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { FieldSelect } from '@/components/common/form';
+import LinkedTaskChip from '@/components/common/linked-task-chip';
+import ConfirmDialog from '@/components/common/confirm-dialog';
+import MemberAvatar from '@/components/common/member-avatar';
 
-interface FileVaultProps {
-  files: FileRecord[];
-  tasks: Task[];
-  userRole?: ProjectRole;
-  currentUserId: string;
-  projectId: string;
-  onAddFile: (newFile: FileRecord) => void;
-  onDeleteFile?: (fileId: string) => void;
-}
+const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.7z', '.tar', '.apk', '.exe'];
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ase', '.psd'];
+const AUDIO_EXTENSIONS = ['.wav', '.mp3', '.ogg', '.flac'];
 
-export default function FileVault({
-  files,
-  tasks,
-  currentUserId,
-  projectId,
-  onAddFile,
-  onDeleteFile,
-}: FileVaultProps) {
+export default function FileVault() {
   const { t, formatBytes, formatDate } = useLocale();
   const { success, error: toastError, warning } = useToast();
+  const { files, tasks, members, memberName, can, deleteFile, refresh } = useAppData();
+
   const [activeFolder, setActiveFolder] = useState('ALL');
   const [showUploadModal, setShowUploadModal] = useState(false);
-
-  // Upload modal states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFolder, setSelectedFolder] = useState('general');
   const [linkedTaskId, setLinkedTaskId] = useState('');
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [fileToDelete, setFileToDelete] = useState<FileRecord | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const uploading = uploadProgress?.status === 'uploading';
 
   const folderTabs = [
     { id: 'ALL', label: t('files.folderAll') },
@@ -78,10 +75,9 @@ export default function FileVault({
     setUploadError(null);
   }, []);
 
-  // Bắt phím Esc để đóng modal tải lên
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showUploadModal && uploadProgress?.status !== 'uploading') {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showUploadModal && uploadProgress?.status !== 'uploading') {
         setShowUploadModal(false);
         resetForm();
       }
@@ -90,55 +86,34 @@ export default function FileVault({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showUploadModal, uploadProgress?.status, resetForm]);
 
-  const filteredFiles = files.filter((f) => {
-    if (activeFolder === 'ALL') return true;
-    return f.folder === activeFolder;
-  });
+  const filteredFiles = files.filter((file) => activeFolder === 'ALL' || file.folder === activeFolder);
 
   const getFileIcon = (filename: string) => {
-    const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
-    if (['.zip', '.rar', '.7z', '.tar', '.apk', '.exe'].includes(ext)) {
-      return <FileArchive className="h-5 w-5 text-amber-400" />;
-    }
-    if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ase', '.psd'].includes(ext)) {
-      return <ImageIcon className="h-5 w-5 text-indigo-400" />;
-    }
-    if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) {
-      return <Music className="h-5 w-5 text-emerald-400" />;
-    }
-    return <File className="h-5 w-5 text-[var(--color-text-muted)]" />;
+    const extension = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+    if (ARCHIVE_EXTENSIONS.includes(extension)) return <FileArchive className="size-5 text-[var(--color-warning)]" />;
+    if (IMAGE_EXTENSIONS.includes(extension)) return <ImageIcon className="size-5 text-[var(--color-brand)]" />;
+    if (AUDIO_EXTENSIONS.includes(extension)) return <Music className="size-5 text-[var(--color-success-text)]" />;
+    return <File className="size-5 text-[var(--color-text-muted)]" />;
   };
 
-  const handleDownload = async (file: FileRecord) => {
+  const handleDownload = async (fileId: string, fileName: string) => {
     try {
-      const res = await fetch(
-        `/api/files/${file.id}/download?key=${encodeURIComponent(file.file_key)}&name=${encodeURIComponent(file.name)}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        window.open(data.downloadUrl, '_blank');
-      } else {
-        success(
-          t('files.downloadNoticeTitle'),
-          t('files.downloadNoticeMsg', { name: file.name })
-        );
-      }
+      const data = await apiFetch<{ downloadUrl: string }>(`/api/files/${fileId}/download`);
+      window.open(data.downloadUrl, '_blank', 'noopener');
     } catch {
-      success(
-        t('files.downloadNoticeTitle'),
-        t('files.downloadNoticeMsg', { name: file.name })
-      );
+      toastError(t('files.downloadFailedTitle'), t('files.downloadFailedMsg', { name: fileName }));
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
 
     const kind: UploadKind = selectedFolder === 'builds' ? 'build' : 'file';
-    const validation = validateUploadFile(file, kind, 10 * 1024 * 1024 * 1024);
+    const validation = validateUploadFile(file, kind);
     if (!validation.valid) {
-      setUploadError(validation.error || t('upload.error.fileTypeNotSupported'));
+      setUploadError(t(`upload.error.${validation.code}` as TranslationKey, validation.params));
       setSelectedFile(null);
       return;
     }
@@ -147,54 +122,8 @@ export default function FileVault({
     setUploadError(null);
   };
 
-  const simulateMockFileUpload = useCallback(() => {
-    let p = 0;
-    const interval = setInterval(() => {
-      if (abortControllerRef.current?.signal.aborted) {
-        clearInterval(interval);
-        return;
-      }
-      p += 25;
-      setUploadProgress({
-        uploadedBytes: (selectedFile!.size * p) / 100,
-        totalBytes: selectedFile!.size,
-        percentage: p,
-        currentPart: Math.ceil(p / 25),
-        totalParts: 4,
-        speedBytesPerSec: 24 * 1024 * 1024,
-        remainingSeconds: (100 - p) / 25,
-        status: p >= 100 ? 'done' : 'uploading',
-      });
-
-      if (p >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          const newFileObj: FileRecord = {
-            id: `file-${crypto.randomUUID()}`,
-            project_id: projectId,
-            folder: selectedFolder,
-            name: selectedFile!.name,
-            file_key: selectedFile!.name,
-            size: selectedFile!.size,
-            mime: selectedFile!.type,
-            uploaded_by: currentUserId,
-            linked_task_id: linkedTaskId || null,
-            created_at: new Date().toISOString(),
-          };
-          onAddFile(newFileObj);
-          success(
-            t('files.uploadSuccessTitle'),
-            t('files.uploadSuccessMsg', { name: selectedFile!.name })
-          );
-          setShowUploadModal(false);
-          resetForm();
-        }, 400);
-      }
-    }, 250);
-  }, [selectedFile, projectId, selectedFolder, currentUserId, linkedTaskId, onAddFile, success, t, resetForm]);
-
-  const handleStartUpload = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleStartUpload = async (event?: React.FormEvent) => {
+    event?.preventDefault();
     if (!selectedFile) return;
 
     setUploadError(null);
@@ -202,8 +131,7 @@ export default function FileVault({
     const kind: UploadKind = selectedFolder === 'builds' ? 'build' : 'file';
 
     try {
-      const uploadRes = await uploadLargeFileToR2({
-        projectId,
+      await uploadLargeFileToR2({
         file: selectedFile,
         kind,
         extraMetadata: {
@@ -211,183 +139,162 @@ export default function FileVault({
           linkedTaskId: linkedTaskId || null,
         },
         signal: abortControllerRef.current.signal,
-        onProgress: (p) => setUploadProgress(p),
+        onProgress: setUploadProgress,
       });
 
-      const actualKey =
-        uploadRes?.record?.file_key ||
-        uploadRes?.key ||
-        `projects/${projectId}/${selectedFolder}/${selectedFile.name}`;
-
-      const newFileObj: FileRecord = {
-        id: uploadRes?.record?.id || `file-${crypto.randomUUID()}`,
-        project_id: projectId,
-        folder: selectedFolder,
-        name: selectedFile.name,
-        file_key: actualKey,
-        size: selectedFile.size,
-        mime: selectedFile.type,
-        uploaded_by: currentUserId,
-        linked_task_id: linkedTaskId || null,
-        created_at: new Date().toISOString(),
-      };
-
-      onAddFile(newFileObj);
-      success(
-        t('files.uploadSuccessTitle'),
-        t('files.uploadSuccessMsg', { name: selectedFile.name })
-      );
+      await refresh();
+      success(t('files.uploadSuccessTitle'), t('files.uploadSuccessMsg', { name: selectedFile.name }));
       setShowUploadModal(false);
       resetForm();
-    } catch (err: unknown) {
+    } catch (err) {
       if (abortControllerRef.current?.signal.aborted) {
         warning(t('videos.uploadAbortedTitle'), t('videos.uploadAbortedMsg'));
         return;
       }
-      const msg = err instanceof Error ? err.message : t('videos.statusError');
-      if (
-        msg.includes('dummy') ||
-        msg.includes('Failed') ||
-        msg.includes('credentials') ||
-        msg.includes('Access Denied') ||
-        msg.includes('denied')
-      ) {
-        simulateMockFileUpload();
-      } else {
-        setUploadError(msg);
-        toastError(t('videos.uploadErrorTitle'), msg);
-      }
+      const message =
+        err instanceof ApiClientError
+          ? t(`apiError.${err.code}` as TranslationKey)
+          : err instanceof Error
+            ? err.message
+            : t('apiError.system');
+      setUploadError(message);
+      toastError(t('videos.uploadErrorTitle'), message);
     }
   };
 
   const handleAbortUpload = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      setUploadProgress((prev) => (prev ? { ...prev, status: 'aborted' } : null));
-      warning(t('videos.uploadAbortedTitle'), t('videos.uploadAbortedMsg'));
+    abortControllerRef.current?.abort();
+    setUploadProgress((prev) => (prev ? { ...prev, status: 'aborted' } : null));
+    warning(t('videos.uploadAbortedTitle'), t('videos.uploadAbortedMsg'));
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!fileToDelete) return;
+    const target = files.find((file) => file.id === fileToDelete);
+    try {
+      await deleteFile(fileToDelete);
+      success(t('files.deleteSuccessTitle'), t('files.deleteSuccessMsg', { name: target?.name ?? '' }));
+    } catch (err) {
+      toastError(
+        t('files.deleteFailedTitle'),
+        err instanceof ApiClientError ? t(`apiError.${err.code}` as TranslationKey) : t('apiError.system')
+      );
+    } finally {
+      setFileToDelete(null);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-base font-bold text-[var(--color-text)] flex items-center gap-2">
-            <FileBox className="h-5 w-5 text-emerald-400" /> {t('files.title')}
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[var(--color-text)]">
+            <FileBox className="size-5 text-[var(--color-success-text)]" /> {t('files.title')}
           </h2>
-          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            {t('files.subtitle')}
-          </p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{t('files.subtitle')}</p>
         </div>
 
-        <Button
-          onClick={() => setShowUploadModal(true)}
-          icon={Upload}
-        >
-          {t('files.uploadBtn')}
-        </Button>
+        {can.contribute && (
+          <Button onClick={() => setShowUploadModal(true)}>
+            <Upload className="size-4" />
+            {t('files.uploadBtn')}
+          </Button>
+        )}
       </div>
 
-      {/* Folder Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {folderTabs.map((f) => {
-          const isActive = activeFolder === f.id;
+      <div className="flex items-center gap-2 overflow-x-auto pb-1" role="tablist">
+        {folderTabs.map((folder) => {
+          const isActive = activeFolder === folder.id;
           return (
             <button
               type="button"
-              key={f.id}
-              onClick={() => setActiveFolder(f.id)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-medium shrink-0 transition-all duration-150 cursor-pointer ${
+              key={folder.id}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveFolder(folder.id)}
+              className={`shrink-0 cursor-pointer rounded-md border px-3.5 py-1.5 text-xs font-medium transition-colors duration-150 ${
                 isActive
-                  ? 'bg-[var(--color-accent)]/20 text-indigo-300 border border-[var(--color-accent)]/30 font-semibold'
-                  : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                  ? 'border-[var(--color-brand)]/40 bg-[var(--color-brand-soft)] font-semibold text-[var(--color-brand-hover)]'
+                  : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-text)]'
               }`}
             >
-              {f.label}
+              {folder.label}
             </button>
           );
         })}
       </div>
 
-      {/* File List Table */}
-      <Card padding="none" className="overflow-hidden shadow-sm">
+      <Card className="gap-0 overflow-hidden p-0">
         <div className="divide-y divide-[var(--color-border)]">
           {filteredFiles.length === 0 ? (
             <div className="p-10 text-center text-xs text-[var(--color-text-muted)]">
-              <FileBox className="h-10 w-10 mx-auto text-[var(--color-text-muted)] mb-2 opacity-80" />
-              <p className="text-[var(--color-text)] font-medium">{t('files.emptyTitle')}</p>
-              <p className="mt-1 text-[var(--color-text-muted)] max-w-sm mx-auto leading-relaxed">
-                {t('files.emptyDesc')}
-              </p>
+              <FileBox className="mx-auto mb-2 size-10 opacity-80" />
+              <p className="font-medium text-[var(--color-text)]">{t('files.emptyTitle')}</p>
+              <p className="mx-auto mt-1 max-w-sm leading-relaxed">{t('files.emptyDesc')}</p>
               <div className="mt-4">
-                <Button
-                  onClick={() => setShowUploadModal(true)}
-                  icon={Upload}
-                >
-                  {t('files.uploadFirstBtn')}
-                </Button>
+                {can.contribute && (
+                  <Button onClick={() => setShowUploadModal(true)}>
+                    <Upload className="size-4" />
+                    {t('files.uploadFirstBtn')}
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
             filteredFiles.map((file) => {
-              const linkedTask = tasks.find((t) => t.id === file.linked_task_id);
+              const linkedTask = tasks.find((task) => task.id === file.linked_task_id);
+              const uploader = members.find((member) => member.id === file.uploaded_by);
 
               return (
                 <div
                   key={file.id}
-                  className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  className="group flex flex-col justify-between gap-3 p-4 transition-colors duration-150 hover:bg-[var(--color-surface)] sm:flex-row sm:items-center"
                 >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="h-10 w-10 rounded-xl bg-[var(--color-surface-raised)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                  <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)]">
                       {getFileIcon(file.name)}
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[var(--color-text)] truncate group-hover:text-indigo-300 transition-colors">
+                      <p className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors group-hover:text-[var(--color-brand-hover)]">
                         {file.name}
                       </p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-muted)] flex-wrap">
-                        <span className="uppercase text-indigo-400 font-mono font-semibold">
-                          {file.folder}
-                        </span>
-                        <span>•</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
+                        <span className="font-mono font-semibold uppercase text-[var(--color-brand)]">{file.folder}</span>
+                        <span aria-hidden="true">•</span>
                         <span>{formatBytes(file.size)}</span>
-                        <span>•</span>
+                        <span aria-hidden="true">•</span>
+                        <span className="flex items-center gap-1.5">
+                          <MemberAvatar slot={uploader?.slot} name={memberName(file.uploaded_by)} size="xs" />
+                          {memberName(file.uploaded_by) ?? '—'}
+                        </span>
+                        <span aria-hidden="true">•</span>
                         <span>{formatDate(file.created_at)}</span>
-
-                        {linkedTask && (
-                          <>
-                            <span>•</span>
-                            <span className="text-[var(--color-text-muted)] bg-[var(--color-surface-raised)] border border-[var(--color-border)] px-2 py-0.5 rounded text-[11px] truncate max-w-[200px]">
-                              Task: {linkedTask.title}
-                            </span>
-                          </>
-                        )}
                       </div>
+                      <LinkedTaskChip task={linkedTask} className="mt-1.5" />
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => handleDownload(file)}
+                      onClick={() => void handleDownload(file.id, file.name)}
                       aria-label={t('files.downloadAria', { name: file.name })}
-                      icon={Download}
                     >
+                      <Download className="size-4" />
                       {t('files.download')}
                     </Button>
 
-                    {onDeleteFile && (
+                    {can.manageRecord(file.uploaded_by) && (
                       <button
                         type="button"
-                        onClick={() => setFileToDelete(file)}
-                        className="p-2 rounded-xl text-[var(--color-text-muted)] hover:text-[var(--color-danger)] hover:bg-rose-950/20 transition-colors cursor-pointer"
+                        onClick={() => setFileToDelete(file.id)}
+                        className="cursor-pointer rounded-md p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
                         aria-label={t('files.deleteAria', { name: file.name })}
                         title={t('files.delete')}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="size-4" />
                       </button>
                     )}
                   </div>
@@ -398,115 +305,93 @@ export default function FileVault({
         </div>
       </Card>
 
-      {/* Upload File Modal */}
       {showUploadModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#091E42]/45 p-4 backdrop-blur-sm animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="upload-file-modal-title"
         >
-          <div className="relative w-full max-w-lg rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3 mb-4">
-              <h3 id="upload-file-modal-title" className="text-base font-bold text-[var(--color-text)]">
+          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+              <h3 id="upload-file-modal-title" className="text-[15px] font-semibold text-[var(--color-text)]">
                 {t('files.uploadModalTitle')}
               </h3>
               <button
                 type="button"
                 onClick={() => {
-                  if (!uploadProgress || uploadProgress.status !== 'uploading') {
+                  if (uploadProgress?.status !== 'uploading') {
                     setShowUploadModal(false);
                     resetForm();
                   }
                 }}
                 aria-label={t('files.closeModalAria')}
-                className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-1 rounded-lg cursor-pointer"
+                className="cursor-pointer rounded-md p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
               >
-                <X className="h-5 w-5" />
+                <X className="size-5" />
               </button>
             </div>
 
             <form onSubmit={handleStartUpload} className="space-y-4">
-              {/* File Select */}
               {!selectedFile ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-[var(--color-border-strong)] hover:border-[var(--color-accent)] rounded-2xl p-8 text-center cursor-pointer transition-colors bg-[var(--color-surface)]/60"
+                  className="cursor-pointer rounded-xl border-2 border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)]/60 p-8 text-center transition-colors hover:border-[var(--color-brand)]"
                 >
-                  <FileBox className="h-10 w-10 mx-auto text-emerald-400 mb-2" />
-                  <p className="text-xs font-semibold text-[var(--color-text)]">
-                    {t('files.dropzoneText')}
-                  </p>
-                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                    {t('files.dropzoneHint')}
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
+                  <FileBox className="mx-auto mb-2 size-10 text-[var(--color-success-text)]" />
+                  <p className="text-xs font-semibold text-[var(--color-text)]">{t('files.dropzoneText')}</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{t('files.dropzoneHint')}</p>
+                  <input ref={fileInputRef} type="file" onChange={handleFileSelect} className="hidden" />
                 </div>
               ) : (
-                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 flex items-center justify-between">
+                <div className="flex items-center justify-between rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
                   <div className="min-w-0 pr-3">
-                    <p className="text-xs font-bold text-[var(--color-text)] truncate">{selectedFile.name}</p>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">{formatBytes(selectedFile.size)}</p>
+                    <p className="truncate text-xs font-semibold text-[var(--color-text)]">{selectedFile.name}</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+                      {formatBytes(selectedFile.size)}
+                    </p>
                   </div>
                   {uploadProgress?.status !== 'uploading' && (
                     <button
                       type="button"
                       onClick={() => setSelectedFile(null)}
                       aria-label={t('videos.removeSelected')}
-                      className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1 cursor-pointer"
+                      className="cursor-pointer p-1 text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="size-4" />
                     </button>
                   )}
                 </div>
               )}
 
-              {/* Folder Selector */}
-              <div>
-                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
-                  {t('files.formFolder')}
-                </label>
-                <select
-                  value={selectedFolder}
-                  onChange={(e) => setSelectedFolder(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                >
-                  <option value="general">{t('files.folderOptionGeneral')}</option>
-                  <option value="builds">{t('files.folderOptionBuilds')}</option>
-                  <option value="assets">{t('files.folderOptionAssets')}</option>
-                  <option value="audio">{t('files.folderOptionAudio')}</option>
-                </select>
-              </div>
+              <FieldSelect
+                label={t('files.formFolder')}
+                value={selectedFolder}
+                onChange={(event) => setSelectedFolder(event.target.value)}
+              >
+                <option value="general">{t('files.folderOptionGeneral')}</option>
+                <option value="builds">{t('files.folderOptionBuilds')}</option>
+                <option value="assets">{t('files.folderOptionAssets')}</option>
+                <option value="audio">{t('files.folderOptionAudio')}</option>
+              </FieldSelect>
 
-              {/* Linked Task Selector */}
-              <div>
-                <label className="text-xs font-medium text-[var(--color-text)] block mb-1">
-                  {t('files.formLinkedTask')}
-                </label>
-                <select
-                  value={linkedTaskId}
-                  onChange={(e) => setLinkedTaskId(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] cursor-pointer"
-                >
-                  <option value="">{t('files.noLinkedTask')}</option>
-                  {tasks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <FieldSelect
+                label={t('files.formLinkedTask')}
+                value={linkedTaskId}
+                onChange={(event) => setLinkedTaskId(event.target.value)}
+              >
+                <option value="">{t('files.noLinkedTask')}</option>
+                {tasks.map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+              </FieldSelect>
 
-              {/* Progress with speed & ETA */}
               {uploadProgress && (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-2.5">
+                <div className="space-y-2.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-emerald-300">
+                    <span className="font-medium text-[var(--color-text)]">
                       {uploadProgress.status === 'initializing' && t('videos.statusInit')}
                       {uploadProgress.status === 'uploading' &&
                         t('videos.statusUploading', {
@@ -518,15 +403,10 @@ export default function FileVault({
                       {uploadProgress.status === 'aborted' && t('videos.statusAborted')}
                       {uploadProgress.status === 'error' && t('videos.statusError')}
                     </span>
-                    <span className="font-mono font-bold text-white">{uploadProgress.percentage}%</span>
+                    <span className="font-mono font-semibold text-[var(--color-brand-hover)]">{uploadProgress.percentage}%</span>
                   </div>
 
-                  <div className="w-full bg-[var(--color-surface)] rounded-full h-2 overflow-hidden border border-[var(--color-border)]">
-                    <div
-                      className="bg-emerald-400 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress.percentage}%` }}
-                    />
-                  </div>
+                  <Progress value={uploadProgress.percentage} className="bg-[var(--color-surface-raised)]" />
 
                   <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
                     <span>
@@ -537,54 +417,41 @@ export default function FileVault({
                     </span>
                     {uploadProgress.status === 'uploading' && (
                       <div className="flex items-center gap-3">
-                        {uploadProgress.speedBytesPerSec !== undefined && uploadProgress.speedBytesPerSec > 0 && (
-                          <span className="flex items-center gap-1 text-emerald-300 font-mono">
-                            <Zap className="h-3 w-3 text-amber-400" />
-                            {t('videos.uploadSpeed', {
-                              speed: formatBytes(uploadProgress.speedBytesPerSec),
-                            })}
+                        {uploadProgress.speedBytesPerSec > 0 && (
+                          <span className="flex items-center gap-1 font-mono text-[var(--color-text)]">
+                            <Zap className="size-3 text-[var(--color-warning)]" />
+                            {t('videos.uploadSpeed', { speed: formatBytes(uploadProgress.speedBytesPerSec) })}
                           </span>
                         )}
-                        {uploadProgress.remainingSeconds !== undefined && (
-                          <span className="flex items-center gap-1 text-[var(--color-text)] font-mono">
-                            <Clock className="h-3 w-3 text-emerald-400" />
-                            {t('videos.uploadEta', {
-                              seconds: Math.ceil(uploadProgress.remainingSeconds),
-                            })}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1 font-mono text-[var(--color-text)]">
+                          <Clock className="size-3 text-[var(--color-brand)]" />
+                          {t('videos.uploadEta', { seconds: Math.ceil(uploadProgress.remainingSeconds) })}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Error message */}
               {uploadError && (
-                <div className="flex items-center justify-between text-xs text-[var(--color-danger)] bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                <div className="flex items-center justify-between rounded-md border border-[var(--color-danger)]/25 bg-[var(--color-danger-soft)] p-3 text-xs text-[var(--color-danger)]">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <AlertTriangle className="size-4 shrink-0" />
                     <span>{uploadError}</span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleStartUpload()}
-                    className="flex items-center gap-1 text-rose-300 hover:text-white font-medium underline underline-offset-2 ml-2 shrink-0 cursor-pointer"
+                    onClick={() => void handleStartUpload()}
+                    className="ml-2 flex shrink-0 cursor-pointer items-center gap-1 font-medium underline underline-offset-2 hover:no-underline"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" /> {t('videos.retry')}
+                    <RefreshCw className="size-3.5" /> {t('videos.retry')}
                   </button>
                 </div>
               )}
 
-              {/* Buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-[var(--color-border)]">
-                {uploadProgress?.status === 'uploading' ? (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    onClick={handleAbortUpload}
-                  >
+              <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-3">
+                {uploading ? (
+                  <Button type="button" variant="destructive" size="sm" onClick={handleAbortUpload}>
                     {t('videos.cancelUpload')}
                   </Button>
                 ) : (
@@ -595,7 +462,7 @@ export default function FileVault({
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={uploadProgress?.status === 'uploading'}
+                    disabled={uploading}
                     onClick={() => {
                       setShowUploadModal(false);
                       resetForm();
@@ -603,12 +470,8 @@ export default function FileVault({
                   >
                     {t('videos.close')}
                   </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    disabled={!selectedFile || uploadProgress?.status === 'uploading'}
-                    icon={Upload}
-                  >
+                  <Button type="submit" disabled={!selectedFile || uploading}>
+                    {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                     {t('videos.startUpload')}
                   </Button>
                 </div>
@@ -618,29 +481,17 @@ export default function FileVault({
         </div>
       )}
 
-      {/* ConfirmDialog khi xóa file */}
-      {fileToDelete && (
-        <ConfirmDialog
-          isOpen={!!fileToDelete}
-          title={t('files.deleteConfirmTitle')}
-          description={t('files.deleteConfirmDesc')}
-          targetName={`"${fileToDelete.name}" (${fileToDelete.folder})`}
-          confirmLabel={t('files.deleteConfirmBtn')}
-          cancelLabel={t('common.cancel')}
-          isDangerous={true}
-          onConfirm={() => {
-            if (onDeleteFile) {
-              onDeleteFile(fileToDelete.id);
-              success(
-                t('files.deleteSuccessTitle'),
-                t('files.deleteSuccessMsg', { name: fileToDelete.name })
-              );
-            }
-            setFileToDelete(null);
-          }}
-          onCancel={() => setFileToDelete(null)}
-        />
-      )}
+      <ConfirmDialog
+        isOpen={!!fileToDelete}
+        title={t('files.deleteConfirmTitle')}
+        description={t('files.deleteConfirmDesc')}
+        targetName={`"${files.find((file) => file.id === fileToDelete)?.name ?? ''}"`}
+        confirmLabel={t('files.deleteConfirmBtn')}
+        cancelLabel={t('common.cancel')}
+        isDangerous={true}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setFileToDelete(null)}
+      />
     </div>
   );
 }

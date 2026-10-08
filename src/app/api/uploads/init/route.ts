@@ -1,102 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyProjectAccess } from '@/lib/auth-helpers';
+import { requireContributor } from '@/lib/auth-helpers';
+import { dbError, ApiError, toErrorResponse } from '@/lib/api';
+import { rateLimit } from '@/lib/rate-limit';
 import { createMultipartUpload, getPresignedPartUrl } from '@/lib/r2/client';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { UPLOAD_LIMITS, DEFAULT_PART_SIZE, MIN_PART_SIZE } from '@/lib/constants';
-import { UploadKind } from '@/types/database';
+import { db } from '@/lib/data';
+import { PROJECT_ID, UPLOAD_LIMITS, DEFAULT_PART_SIZE, MIN_PART_SIZE } from '@/lib/constants';
+import type { UploadKind } from '@/types/database';
+
+const KINDS: readonly UploadKind[] = ['video', 'build', 'file'];
+const PRESIGNED_PARTS_UPFRONT = 20;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { projectId, filename, size, mime, kind } = body as {
-      projectId: string;
-      filename: string;
-      size: number;
-      mime?: string;
-      kind: UploadKind;
-    };
+    const { session } = await requireContributor();
 
-    if (!projectId || !filename || !size || !kind) {
-      return NextResponse.json({ error: 'Thiếu thông số bắt buộc' }, { status: 400 });
+    const limited = rateLimit(req, 'upload-init', 60, 60 * 60 * 1000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: 'rate_limited', retryAfter: limited.retryAfterSeconds },
+        { status: 429 }
+      );
     }
 
-    // 1. Kiểm tra quyền (phải từ MEMBER trở lên)
-    const { user } = await verifyProjectAccess(projectId, ['OWNER', 'ADMIN', 'MEMBER']);
+    const body = (await req.json().catch(() => null)) as {
+      filename?: unknown;
+      size?: unknown;
+      mime?: unknown;
+      kind?: unknown;
+    } | null;
 
-    // 2. Kiểm tra loại upload hợp lệ
-    const limitConfig = UPLOAD_LIMITS[kind];
-    if (!limitConfig) {
-      return NextResponse.json({ error: 'Loại file không hợp lệ' }, { status: 400 });
+    const kind = body?.kind;
+    const filename = body?.filename;
+    const size = body?.size;
+
+    if (typeof kind !== 'string' || !KINDS.includes(kind as UploadKind)) {
+      throw new ApiError(400, 'invalid', 'kind');
+    }
+    if (typeof filename !== 'string' || !filename.trim()) {
+      throw new ApiError(400, 'invalid', 'filename');
+    }
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) {
+      throw new ApiError(400, 'invalid', 'size');
     }
 
-    // 3. Kiểm tra kích thước
+    const limitConfig = UPLOAD_LIMITS[kind as UploadKind];
     if (size > limitConfig.maxSize) {
-      return NextResponse.json(
-        { error: `File vượt quá dung lượng cho phép (${Math.round(limitConfig.maxSize / (1024 * 1024 * 1024))}GB)` },
-        { status: 400 }
-      );
+      throw new ApiError(400, 'invalid', 'size');
     }
 
-    // 4. Kiểm tra phần mở rộng file
-    const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
-    const isAllowedExt = (limitConfig.allowedExtensions as readonly string[]).includes(ext);
-    if (!isAllowedExt) {
-      return NextResponse.json(
-        { error: `Phần mở rộng ${ext} không được hỗ trợ cho loại ${kind}` },
-        { status: 400 }
-      );
+    const dot = filename.lastIndexOf('.');
+    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';
+    if (!(limitConfig.allowedExtensions as readonly string[]).includes(ext)) {
+      throw new ApiError(400, 'invalid', 'filename');
     }
 
-    // 5. Chuẩn hóa object key trên R2: projects/{projectId}/{kind}/{uuid}/{filename}
-    const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectKey = `projects/${projectId}/${kind}/${crypto.randomUUID()}/${cleanFilename}`;
+    // projectId do server quyết định, không nhận từ client.
+    const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-180) || `file${ext}`;
+    const objectKey = `projects/${PROJECT_ID}/${kind}/${crypto.randomUUID()}/${cleanFilename}`;
+    const contentType =
+      typeof body?.mime === 'string' && /^[\w!#$&^_.+-]{1,127}\/[\w!#$&^_.+-]{1,127}$/.test(body.mime)
+        ? body.mime
+        : 'application/octet-stream';
 
-    // 6. Gọi R2 CreateMultipartUpload
-    const uploadId = await createMultipartUpload(objectKey, mime || 'application/octet-stream');
+    const uploadId = await createMultipartUpload(objectKey, contentType);
 
-    // 7. Ghi bản ghi vào bảng uploads (status: pending)
-    const supabase = await createServerSupabaseClient();
-    const { error: insertError } = await supabase.from('uploads').insert({
-      project_id: projectId,
-      user_id: user.id,
+    const { error: insertError } = await db().from('uploads').insert({
+      project_id: PROJECT_ID,
+      user_id: session.userId,
       kind,
       key: objectKey,
       r2_upload_id: uploadId,
       status: 'pending',
       size,
     });
+    if (insertError) throw dbError(insertError);
 
-    if (insertError) {
-      console.error('Lỗi lưu upload record vào database:', insertError);
-    }
+    const partSize = size < DEFAULT_PART_SIZE ? Math.max(size, MIN_PART_SIZE) : DEFAULT_PART_SIZE;
+    const totalParts = Math.max(1, Math.ceil(size / partSize));
 
-    // 8. Tính toán số part
-    // Quy tắc: part_size tối thiểu 5MB, mặc định 100MB cho file lớn
-    let partSize = DEFAULT_PART_SIZE;
-    if (size < DEFAULT_PART_SIZE) {
-      partSize = Math.max(size, MIN_PART_SIZE);
-    }
-
-    const totalParts = Math.ceil(size / partSize);
-
-    // 9. Cấp presigned URLs trước cho các part (hoặc toàn bộ nếu < 100 parts)
-    const partsToPresign = Math.min(totalParts, 20); // Tạo trước 20 part đầu, client có thể lấy thêm qua /part-url
     const partUrls: { partNumber: number; url: string }[] = [];
-
-    for (let i = 1; i <= partsToPresign; i++) {
-      const url = await getPresignedPartUrl(objectKey, uploadId, i, 3600);
-      partUrls.push({ partNumber: i, url });
+    for (let partNumber = 1; partNumber <= Math.min(totalParts, PRESIGNED_PARTS_UPFRONT); partNumber++) {
+      partUrls.push({
+        partNumber,
+        url: await getPresignedPartUrl(objectKey, uploadId, partNumber, 3600),
+      });
     }
 
-    return NextResponse.json({
-      uploadId,
-      key: objectKey,
-      partSize,
-      totalParts,
-      partUrls,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Lỗi hệ thống';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ uploadId, key: objectKey, partSize, totalParts, partUrls });
+  } catch (err) {
+    return toErrorResponse(err);
   }
 }

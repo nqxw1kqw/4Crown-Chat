@@ -111,7 +111,7 @@ export function isOverdue(
     return false;
   }
   const ref = typeof statusOrRefTime === 'number' ? statusOrRefTime : referenceTime;
-  const now = ref ?? new Date('2026-10-08T12:00:00Z').getTime();
+  const now = ref ?? (typeof window !== 'undefined' ? Date.now() : new Date('2026-10-09T00:00:00Z').getTime());
   const date = new Date(dateString);
   return !isNaN(date.getTime()) && date.getTime() < now;
 }

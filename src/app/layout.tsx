@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
-import { Inter, Noto_Sans_JP } from 'next/font/google';
+import { Be_Vietnam_Pro, Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
-  variable: '--font-inter',
+// Be Vietnam Pro thiết kế riêng cho dấu thanh tiếng Việt (Inter hay bị lệch/dồn dấu).
+const sansVi = Be_Vietnam_Pro({
+  variable: '--font-sans-vi',
   subsets: ['latin', 'vietnamese'],
+  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 
@@ -28,7 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${inter.variable} ${notoSansJP.variable} h-full antialiased dark`}
+      className={`${sansVi.variable} ${notoSansJP.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
         {children}

@@ -1,263 +1,276 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { X, User, RotateCcw, Save, Shield } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, LogOut, Save, Shield, Loader2, UserPlus, UserMinus } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
-import { SlotId, SLOT_IDS, LocalProfileState, saveStoredProfile, resetStoredProfile } from '@/lib/profile';
-import { ProjectRole } from '@/types/database';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Card } from '@/components/ui/Card';
+import type { TranslationKey } from '@/i18n/dictionaries/vi';
+import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
+import { ApiClientError } from '@/lib/api-client';
+import { useAppData } from '@/components/providers/AppDataProvider';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { FieldInput, FieldSelect } from '@/components/common/form';
+import { RoleBadge } from '@/components/common/badges';
+import MemberAvatar from '@/components/common/member-avatar';
+import { useToast } from '@/components/ui/Toast';
+import type { ProjectRole } from '@/types/database';
 
 interface ProfileModalProps {
-  isOpen: boolean;
   onClose: () => void;
-  currentProfile: LocalProfileState;
-  onUpdateProfile: (updated: LocalProfileState) => void;
-  onResetIdentity: () => void;
 }
+
+const ROLE_BADGE_COLORS: Record<ProjectRole, string> = {
+  OWNER: 'rounded-md border-[#974F0C]/40 text-[var(--color-warning)] bg-[var(--color-warning-soft)]',
+  ADMIN: 'rounded-md border-[var(--color-brand)]/40 text-[var(--color-brand-hover)] bg-[var(--color-brand-soft)]',
+  MEMBER: 'rounded-md border-[var(--color-success)]/60 text-[var(--color-success-text)] bg-[var(--color-success-soft)]',
+  VIEWER: 'rounded-md border-[var(--color-border-strong)] text-[var(--color-text-muted)] bg-[var(--color-surface-raised)]',
+};
 
 const ROLE_OPTIONS: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'];
 
-const ROLE_BADGE_COLORS: Record<ProjectRole, string> = {
-  OWNER: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
-  ADMIN: 'border-indigo-500/40 text-indigo-300 bg-indigo-500/10',
-  MEMBER: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
-  VIEWER: 'border-zinc-500/40 text-zinc-300 bg-zinc-500/10',
-};
-
-export default function ProfileModal({
-  isOpen,
-  onClose,
-  currentProfile,
-  onUpdateProfile,
-  onResetIdentity,
-}: ProfileModalProps) {
+export default function ProfileModal({ onClose }: ProfileModalProps) {
   const { t } = useLocale();
-  const [activeSlot, setActiveSlot] = useState<SlotId>(currentProfile.currentSlotId || 'm1');
-  const [activeRole, setActiveRole] = useState<ProjectRole>(currentProfile.role || 'ADMIN');
-  const [editableNames, setEditableNames] = useState<Record<SlotId, string>>({
-    ...currentProfile.names,
+  const { success, error } = useToast();
+  const { session, can, members, myRole, renameMembers, updateTeam, logout } = useAppData();
+
+  const [names, setNames] = useState<Record<SlotId, string>>(() => {
+    const next = { ...DEFAULT_SLOT_NAMES };
+    for (const member of members) next[member.slot] = member.display_name;
+    return next;
   });
+  // null = slot đang bị loại khỏi team.
+  const [roles, setRoles] = useState<Record<SlotId, ProjectRole | null>>(() => {
+    const next = { m1: null, m2: null, m3: null, m4: null } as Record<SlotId, ProjectRole | null>;
+    for (const member of members) next[member.slot] = member.role;
+    return next;
+  });
+  const [saving, setSaving] = useState(false);
 
-  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
-  if (prevIsOpen !== isOpen) {
-    setPrevIsOpen(isOpen);
-    if (isOpen) {
-      setActiveSlot(currentProfile.currentSlotId || 'm1');
-      setActiveRole(currentProfile.role || 'ADMIN');
-      setEditableNames({ ...currentProfile.names });
-    }
-  }
-
-  // Đóng modal khi bấm Escape
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [onClose]);
 
-  if (!isOpen) return null;
+  if (!session) return null;
 
-  const handleNameChange = (slotId: SlotId, val: string) => {
-    setEditableNames((prev) => ({
-      ...prev,
-      [slotId]: val,
-    }));
+  const role = myRole ?? session.role;
+  const currentMemberName =
+    members.find((m) => m.slot === session.slot)?.display_name ?? session.slot.toUpperCase();
+
+  const teamPatch = (): { roles?: Record<SlotId, ProjectRole>; add?: Record<SlotId, ProjectRole>; remove: SlotId[] } => {
+    const changedRoles = {} as Record<SlotId, ProjectRole>;
+    const added = {} as Record<SlotId, ProjectRole>;
+    const removed: SlotId[] = [];
+    for (const slot of SLOT_IDS) {
+      if (slot === session.slot) continue;
+      const current = members.find((m) => m.slot === slot)?.role ?? null;
+      const desired = roles[slot];
+      if (current === desired) continue;
+      if (desired === null) removed.push(slot);
+      else if (current === null) added[slot] = desired;
+      else changedRoles[slot] = desired;
+    }
+    return { roles: changedRoles, add: added, remove: removed };
   };
 
-  const handleSave = () => {
-    const updated: LocalProfileState = {
-      currentSlotId: activeSlot,
-      role: activeRole,
-      names: {
-        m1: editableNames.m1.trim() || currentProfile.names.m1,
-        m2: editableNames.m2.trim() || currentProfile.names.m2,
-        m3: editableNames.m3.trim() || currentProfile.names.m3,
-        m4: editableNames.m4.trim() || currentProfile.names.m4,
-      },
-    };
-    saveStoredProfile(updated);
-    onUpdateProfile(updated);
-    onClose();
+  const namePatch = (): Partial<Record<SlotId, string>> => {
+    const next: Partial<Record<SlotId, string>> = {};
+    for (const slot of SLOT_IDS) {
+      const cleaned = names[slot].trim();
+      if (!cleaned) continue;
+      const current = members.find((m) => m.slot === slot)?.display_name;
+      if (current !== undefined && current !== cleaned) next[slot] = cleaned;
+    }
+    return next;
   };
 
-  const handleReset = () => {
-    resetStoredProfile();
-    onResetIdentity();
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const pendingNames = namePatch();
+      if (Object.keys(pendingNames).length > 0) await renameMembers(pendingNames);
+
+      if (can.manageRoles) {
+        const patch = teamPatch();
+        if (
+          patch.remove.length > 0 ||
+          Object.keys(patch.roles ?? {}).length > 0 ||
+          Object.keys(patch.add ?? {}).length > 0
+        ) {
+          await updateTeam(patch);
+        }
+      }
+
+      success(t('profile.save'), t('profile.savedMsg'));
+      onClose();
+    } catch (err) {
+      error(
+        t('profile.save'),
+        err instanceof ApiClientError
+          ? t(`apiError.${err.code}` as TranslationKey)
+          : t('profile.saveFailedMsg')
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSwitchIdentity = async () => {
+    await logout();
     onClose();
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-[#091E42]/45 p-4 backdrop-blur-sm fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="profile-modal-title"
     >
-      <div className="relative w-full max-w-xl flex flex-col max-h-[90vh] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-md">
-              <User className="h-5 w-5" />
-            </div>
+            <MemberAvatar slot={session.slot} name={currentMemberName} size="md" />
             <div>
-              <h3 id="profile-modal-title" className="text-base font-bold text-[var(--color-text)]">
+              <h3 id="profile-modal-title" className="text-sm font-semibold text-[var(--color-text)]">
                 {t('profile.title')}
               </h3>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                {t('profile.renameHint')}
-              </p>
+              <p className="text-xs text-[var(--color-text-muted)]">{t('profile.renameHint')}</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onClose}
             aria-label={t('common.close')}
-            className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+            className="text-[var(--color-text-muted)]"
           >
-            <X className="h-5 w-5" />
-          </button>
+            <X className="size-4" />
+          </Button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto">
-          {/* Section 1: Choose Active Slot */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block">
-              {t('profile.changeUser')}
-            </label>
-            <div className="grid grid-cols-2 gap-2.5">
-              {SLOT_IDS.map((slotId) => {
-                const isSelected = activeSlot === slotId;
-                const displayName = editableNames[slotId];
-                return (
-                  <button
-                    key={slotId}
-                    type="button"
-                    onClick={() => setActiveSlot(slotId)}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all duration-150 cursor-pointer ${
-                      isSelected
-                        ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/15 shadow-sm ring-1 ring-[var(--color-accent)]'
-                        : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)]'
-                    }`}
-                    aria-pressed={isSelected}
-                  >
-                    <div className="min-w-0 pr-2">
-                      <span className="text-[10px] font-mono font-bold text-indigo-400 block">
-                        {t('profile.slotLabel', { slot: slotId.toUpperCase() })}
-                      </span>
-                      <span className="text-xs font-bold text-[var(--color-text)] truncate block">
-                        {displayName}
-                      </span>
-                    </div>
-                    {isSelected && (
-                      <span className="h-2 w-2 rounded-full bg-[var(--color-accent)] shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section 2: Choose Role */}
-          <div className="space-y-2.5">
-            <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider block">
-              {t('profile.changeRole')}
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {ROLE_OPTIONS.map((role) => {
-                const isSelected = activeRole === role;
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => setActiveRole(role)}
-                    className={`p-2.5 rounded-xl border text-center transition-all duration-150 cursor-pointer ${
-                      isSelected
-                        ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/20 ring-1 ring-[var(--color-accent)] font-bold'
-                        : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)]'
-                    }`}
-                    aria-pressed={isSelected}
-                  >
-                    <span className={`text-xs block ${ROLE_BADGE_COLORS[role]}`}>
-                      {t(`role.${role}` as Parameters<typeof t>[0])}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="p-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-muted)] flex items-start gap-2">
-              <Shield className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" />
-              <span>
-                {t(`role.desc.${activeRole}` as unknown as Parameters<typeof t>[0])}
+        <div className="space-y-4 overflow-y-auto p-6">
+          <Card className="flex-row items-center justify-between gap-3 p-4 shadow-none">
+            <div className="min-w-0">
+              <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                {t('profile.currentIdentity')}
+              </span>
+              <span className="mt-0.5 block truncate text-sm font-semibold text-[var(--color-text)]">
+                {currentMemberName}
+                <span className="ml-2 font-mono text-[11px] font-medium text-[var(--color-brand)]">
+                  {t('profile.slotLabel', { slot: session.slot.toUpperCase() })}
+                </span>
               </span>
             </div>
+            <RoleBadge role={role} className={ROLE_BADGE_COLORS[role]} />
+          </Card>
+
+          <div className="flex items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs text-[var(--color-text-muted)]">
+            <Shield className="mt-0.5 size-4 shrink-0 text-[var(--color-brand)]" />
+            <span>{t(`role.desc.${role}` as unknown as Parameters<typeof t>[0])}</span>
           </div>
 
-          {/* Section 3: Rename Slots */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                {t('profile.rename')}
-              </label>
-              <span className="text-[11px] text-[var(--color-text-muted)]">
-                {t('profile.renameHint')}
-              </span>
-            </div>
-            <Card className="p-3.5 space-y-3">
-              {SLOT_IDS.map((slotId) => (
+          <div className="space-y-2">
+            <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              {t('profile.rename')}
+            </span>
+            <Card className="gap-3 p-4 shadow-none">
+              {(can.manageTeam ? SLOT_IDS : [session.slot]).map((slotId) => (
                 <div key={slotId} className="flex items-center gap-3">
-                  <span className="w-16 font-mono text-xs font-bold text-indigo-400 shrink-0">
+                  <MemberAvatar slot={slotId} name={names[slotId]} size="sm" />
+                  <span className="w-10 shrink-0 font-mono text-xs font-semibold text-[var(--color-text-muted)]">
                     {slotId.toUpperCase()}
                   </span>
-                  <Input
-                    value={editableNames[slotId]}
-                    onChange={(e) => handleNameChange(slotId, e.target.value)}
-                    placeholder={currentProfile.names[slotId]}
-                    className="flex-1 text-xs py-1.5"
+                  <FieldInput
+                    value={names[slotId]}
+                    onChange={(e) => setNames((prev) => ({ ...prev, [slotId]: e.target.value }))}
+                    maxLength={40}
+                    placeholder={slotId.toUpperCase()}
+                    aria-label={t('profile.slotLabel', { slot: slotId.toUpperCase() })}
+                    className="flex-1 text-xs"
                   />
                 </div>
               ))}
             </Card>
           </div>
+
+          {can.manageRoles && (
+            <div className="space-y-2">
+              <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+                {t('profile.teamTitle')}
+              </span>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{t('profile.teamHint')}</p>
+              <Card className="gap-3 p-4 shadow-none">
+                {SLOT_IDS.map((slotId) => {
+                  const isSelf = slotId === session.slot;
+                  const inTeam = roles[slotId] !== null;
+                  return (
+                    <div key={slotId} className="flex flex-wrap items-center gap-3">
+                      <MemberAvatar slot={slotId} name={names[slotId]} size="sm" />
+                      <span className="w-10 shrink-0 font-mono text-xs font-semibold text-[var(--color-text-muted)]">
+                        {slotId.toUpperCase()}
+                      </span>
+                      <FieldSelect
+                        value={roles[slotId] ?? ''}
+                        disabled={isSelf}
+                        aria-label={t('profile.roleLabel', { slot: slotId.toUpperCase() })}
+                        onChange={(event) =>
+                          setRoles((prev) => ({
+                            ...prev,
+                            [slotId]: (event.target.value || null) as ProjectRole | null,
+                          }))
+                        }
+                        className="h-8 w-auto min-w-[7.5rem] flex-1 sm:flex-none"
+                      >
+                        {!inTeam && !isSelf && <option value="">{t('profile.notInTeam')}</option>}
+                        {ROLE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {t(`role.${option}` as TranslationKey)}
+                          </option>
+                        ))}
+                      </FieldSelect>
+                      {!isSelf && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRoles((prev) => ({ ...prev, [slotId]: inTeam ? null : 'MEMBER' }))
+                          }
+                          aria-label={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
+                          title={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
+                          className="cursor-pointer rounded-md p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)]"
+                        >
+                          {inTeam ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </Card>
+            </div>
+          )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
+        <div className="flex items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={handleReset}
-            className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs"
-            icon={RotateCcw}
+            onClick={handleSwitchIdentity}
+            className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
           >
-            {t('profile.reset')}
+            <LogOut className="size-4" />
+            {t('profile.switchIdentity')}
           </Button>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onClose}
-              className="text-xs"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={handleSave}
-              className="text-xs font-bold"
-              icon={Save}
-            >
+            <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               {t('profile.save')}
             </Button>
           </div>

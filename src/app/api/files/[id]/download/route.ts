@@ -1,91 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { verifyProjectAccess } from '@/lib/auth-helpers';
-import { getPresignedFileDownloadUrl, getR2Client, getR2BucketName } from '@/lib/r2/client';
-import { ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { dbError, toErrorResponse, ApiError } from '@/lib/api';
+import { requireSession } from '@/lib/auth-helpers';
+import { rateLimit } from '@/lib/rate-limit';
+import { db } from '@/lib/data';
+import { PROJECT_ID } from '@/lib/constants';
+import { assertProjectKey, getPresignedFileDownloadUrl } from '@/lib/r2/client';
+
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const { searchParams } = new URL(req.url);
-    const keyParam = searchParams.get('key');
-    const nameParam = searchParams.get('name');
-    const supabase = await createServerSupabaseClient();
+    await requireSession();
 
-    let fileKey: string | null = null;
-    let fileName = 'download';
-    let fileSize = 0;
-    let projectId = 'proj-1';
-
-    try {
-      const { data: file, error } = await supabase
-        .from('files')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (!error && file) {
-        fileKey = file.file_key;
-        fileName = file.name;
-        fileSize = file.size;
-        projectId = file.project_id;
-      }
-    } catch {
-      // Bỏ qua lỗi DB ở chế độ demo
-    }
-
-    if (!fileKey && keyParam) {
-      fileKey = keyParam;
-      fileName = nameParam || 'file';
-    }
-
-    if (!fileKey) {
-      return NextResponse.json({ error: 'Không tìm thấy file' }, { status: 404 });
-    }
-
-    // Kiểm tra quyền (VIEWER trở lên)
-    await verifyProjectAccess(projectId, ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
-
-    // Phân giải key thật trong Cloudflare R2 nếu key thiếu UUID
-    let actualKey = fileKey;
-    try {
-      const s3 = getR2Client();
-      const bucket = getR2BucketName();
-      const filename = fileKey.split('/').pop() || fileKey;
-
-      const listRes = await s3.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: `projects/${projectId}/`,
-        })
+    const limited = rateLimit(req, 'signed-url', 240, 60 * 60 * 1000);
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: 'rate_limited', retryAfter: limited.retryAfterSeconds },
+        { status: 429 }
       );
-
-      if (listRes.Contents && listRes.Contents.length > 0) {
-        const match = listRes.Contents.slice()
-          .reverse()
-          .find((item) => item.Key && (item.Key === fileKey || item.Key.endsWith(`/${filename}`)));
-        if (match?.Key) {
-          actualKey = match.Key;
-        }
-      }
-    } catch (r2Err) {
-      console.warn('Lỗi phân giải file key R2:', r2Err);
     }
 
-    // Cấp presigned Download URL
-    const downloadUrl = await getPresignedFileDownloadUrl(actualKey, fileName, 3600);
+    const { id } = await params;
+
+    // Key và tên file chỉ được lấy từ row trong DB, không bao giờ từ query string.
+    const { data: file, error } = await db()
+      .from('files')
+      .select('*')
+      .eq('id', id)
+      .eq('project_id', PROJECT_ID)
+      .maybeSingle();
+
+    if (error) throw dbError(error);
+    if (!file) throw new ApiError(404, 'not_found');
+
+    const fileKey = assertProjectKey(file.file_key, PROJECT_ID);
+    const downloadUrl = await getPresignedFileDownloadUrl(fileKey, file.name, SIGNED_URL_TTL_SECONDS);
 
     return NextResponse.json({
       id,
-      name: fileName,
-      size: fileSize,
+      name: file.name,
+      size: file.size,
       downloadUrl,
     });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Lỗi hệ thống';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    return toErrorResponse(err);
   }
 }

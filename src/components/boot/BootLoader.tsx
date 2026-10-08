@@ -1,135 +1,104 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Gamepad2, Loader2 } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 
 interface BootLoaderProps {
+  /** true khi /api/bootstrap đã settle (thành công hoặc thất bại) */
+  bootDone: boolean;
   onComplete: () => void;
-  durationMs?: number;
+  minDurationMs?: number;
 }
 
-export default function BootLoader({
-  onComplete,
-  durationMs = 2500,
-}: BootLoaderProps) {
+/**
+ * Không dùng requestAnimationFrame: rAF bị trình duyệt dừng khi tab ẩn,
+ * khiến progress kẹt ở 0% vĩnh viễn. Đồng hồ ở đây chạy bằng setInterval
+ * trên mốc thời gian tuyệt đối nên vẫn tới đích dù tab không hiển thị.
+ */
+export default function BootLoader({ bootDone, onComplete, minDurationMs = 1600 }: BootLoaderProps) {
   const { t, formatNumber } = useLocale();
-  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const completedRef = useRef(false);
 
   useEffect(() => {
-    const startTime = performance.now();
-    let animId: number;
+    const startedAt = Date.now();
+    const timer = setInterval(() => setElapsed(Date.now() - startedAt), 100);
+    return () => clearInterval(timer);
+  }, []);
 
-    const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const rawPct = Math.min(100, (elapsed / durationMs) * 100);
+  const finished = bootDone && elapsed >= minDurationMs;
 
-      // Tăng tốc tự nhiên: hơi nhanh lúc đầu, chậm lại giữa, rồi nhanh về đích
-      let easedPct = rawPct;
-      if (rawPct < 40) {
-        easedPct = rawPct * 1.1;
-      } else if (rawPct < 80) {
-        easedPct = 44 + (rawPct - 40) * 0.9;
-      } else {
-        easedPct = 80 + (rawPct - 80) * 1.0;
-      }
-      easedPct = Math.min(100, Math.round(easedPct));
-
-      setProgress(easedPct);
-
-      if (rawPct < 100) {
-        animId = requestAnimationFrame(tick);
-      } else {
-        if (!completedRef.current) {
-          completedRef.current = true;
-          // Giữ thêm 200ms khi đạt 100% rồi chuyển tiếp
-          setTimeout(() => {
-            onComplete();
-          }, 200);
-        }
-      }
-    };
-
-    animId = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(animId);
-    };
-  }, [durationMs, onComplete]);
-
-  // Xác định dòng trạng thái theo từng mốc tiến trình
-  const getStatusText = (pct: number) => {
-    if (pct < 30) {
-      return t('boot.loading.init');
+  useEffect(() => {
+    if (finished && !completedRef.current) {
+      completedRef.current = true;
+      onComplete();
     }
-    if (pct < 60) {
-      return t('boot.loading.connect');
-    }
-    if (pct < 85) {
-      return t('boot.loading.tasks');
-    }
-    return t('boot.loading.ready');
-  };
+  }, [finished, onComplete]);
 
-  const statusMessage = getStatusText(progress);
+  const progress = finished
+    ? 100
+    : Math.min(95, Math.round((Math.min(elapsed, minDurationMs) / minDurationMs) * 95));
+
+  const statusMessage =
+    progress < 30
+      ? t('boot.loading.init')
+      : progress < 60
+        ? t('boot.loading.connect')
+        : progress < 85
+          ? t('boot.loading.tasks')
+          : t('boot.loading.ready');
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-[var(--color-bg)] transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-bg)] p-4 sm:p-6"
       role="region"
       aria-label={t('nav.brand')}
     >
-      <div className="w-full max-w-md flex flex-col items-center text-center space-y-7 animate-in fade-in duration-200">
-        {/* Brand Logo & Icon */}
-        <div className="space-y-3">
+      <div className="flex w-full max-w-md animate-in fade-in flex-col items-center gap-7 duration-200">
+        <div className="space-y-3 text-center">
           <div
-            className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-xl shadow-indigo-500/25 motion-safe:animate-pulse"
+            className="inline-flex size-14 items-center justify-center rounded-lg bg-[var(--color-brand)] text-white motion-safe:animate-pulse"
             aria-hidden="true"
           >
-            <Gamepad2 className="h-8 w-8" />
+            <Gamepad2 className="size-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold text-[var(--color-text)] tracking-tight">
+            <h1 className="text-xl font-semibold tracking-tight text-[var(--color-text)]">
               {t('nav.brand')}
             </h1>
-            <span className="inline-block mt-1 rounded bg-[var(--color-accent)]/20 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+            <span className="mt-1 inline-block rounded bg-[var(--color-brand-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-brand-hover)]">
               {t('nav.version')}
             </span>
           </div>
         </div>
 
-        {/* Progress Bar Container */}
-        <div className="w-full space-y-3">
-          {/* Bar */}
+        <div className="w-full space-y-2.5">
           <div
             role="progressbar"
             aria-valuenow={progress}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuetext={`${statusMessage} (${formatNumber(progress)}%)`}
-            className="w-full bg-[var(--color-surface-raised)] border border-[var(--color-border)] rounded-full h-2.5 sm:h-3 overflow-hidden p-0.5 shadow-inner"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-surface-raised)]"
           >
             <div
-              className="bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-400 h-full rounded-full transition-all ease-out motion-reduce:transition-none"
-              style={{
-                width: `${progress}%`,
-                transitionDuration: '100ms',
-              }}
+              className="h-full rounded-full bg-[var(--color-brand)] ease-out motion-reduce:transition-none"
+              style={{ width: `${progress}%`, transition: 'width 100ms linear' }}
             />
           </div>
 
-          {/* Status Message and Percentage */}
-          <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] px-1">
-            <div
-              className="flex items-center gap-1.5 font-medium truncate pr-2"
-              aria-live="polite"
-            >
+          <div className="flex items-center justify-between px-0.5 text-xs text-[var(--color-text-muted)]">
+            <div className="flex min-w-0 items-center gap-1.5 font-medium" aria-live="polite">
               {progress < 100 && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400 shrink-0" aria-hidden="true" />
+                <Loader2
+                  className="size-3.5 shrink-0 animate-spin text-[var(--color-brand)]"
+                  aria-hidden="true"
+                />
               )}
               <span className="truncate">{statusMessage}</span>
             </div>
-            <span className="font-mono font-bold text-[var(--color-text)] shrink-0">
+            <span className="shrink-0 font-mono font-semibold text-[var(--color-text)]">
               {formatNumber(progress)}%
             </span>
           </div>

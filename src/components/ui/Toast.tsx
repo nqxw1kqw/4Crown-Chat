@@ -64,33 +64,35 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={toast.id}
-              className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl backdrop-blur-md transition-all duration-300 animate-in slide-in-from-top-2 ${
+              className={`pointer-events-auto flex items-start gap-3 rounded-lg border p-3.5 shadow-lg transition-all duration-300 animate-in slide-in-from-top-2 ${
                 isSuccess
-                  ? 'bg-[#101f19]/90 border-emerald-500/40 text-emerald-200'
+                  ? 'border-[var(--color-border)] bg-[var(--color-success-soft)]'
                   : isError
-                  ? 'bg-[#221316]/90 border-rose-500/40 text-rose-200'
+                  ? 'border-[var(--color-danger)]/25 bg-[var(--color-danger-soft)]'
                   : isWarning
-                  ? 'bg-[#211a12]/90 border-amber-500/40 text-amber-200'
-                  : 'bg-[#141724]/90 border-indigo-500/40 text-indigo-200'
+                  ? 'border-[var(--color-warning)]/25 bg-[var(--color-warning-soft)]'
+                  : 'border-[var(--color-border)] bg-[var(--color-brand-soft)]'
               }`}
               role="alert"
             >
               <div className="shrink-0 mt-0.5">
-                {isSuccess && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                {isError && <AlertCircle className="h-4 w-4 text-rose-400" />}
-                {isWarning && <AlertTriangle className="h-4 w-4 text-amber-400" />}
-                {!isSuccess && !isError && !isWarning && <Info className="h-4 w-4 text-indigo-400" />}
+                {isSuccess && <CheckCircle2 className="h-4 w-4 text-[var(--color-success-text)]" />}
+                {isError && <AlertCircle className="h-4 w-4 text-[var(--color-danger)]" />}
+                {isWarning && <AlertTriangle className="h-4 w-4 text-[var(--color-warning)]" />}
+                {!isSuccess && !isError && !isWarning && <Info className="h-4 w-4 text-[var(--color-brand)]" />}
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold leading-tight text-white">{toast.title}</p>
-                {toast.message && <p className="text-[11px] opacity-80 mt-0.5">{toast.message}</p>}
+                <p className="text-xs font-semibold leading-tight text-[var(--color-text)]">{toast.title}</p>
+                {toast.message && (
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">{toast.message}</p>
+                )}
               </div>
 
               <button
                 type="button"
                 onClick={() => removeToast(toast.id)}
-                className="shrink-0 text-zinc-400 hover:text-white p-0.5 rounded transition-colors"
+                className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)] p-0.5 rounded transition-colors"
                 aria-label="Close"
               >
                 <X className="h-3.5 w-3.5" />
