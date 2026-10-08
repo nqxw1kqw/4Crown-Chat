@@ -16,6 +16,7 @@ import {
   Zap,
   Clock,
   User,
+  Eye,
 } from 'lucide-react';
 import { FileRecord, ProjectRole, Task, UploadKind } from '@/types/database';
 import {
@@ -62,6 +63,7 @@ export default function FileVault({
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<FileRecord | null>(null);
+  const [previewingFile, setPreviewingFile] = useState<FileRecord | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -82,22 +84,33 @@ export default function FileVault({
     setUploadError(null);
   }, []);
 
-  // Bắt phím Esc để đóng modal tải lên
+  // Bắt phím Esc để đóng modal tải lên hoặc modal xem trước ảnh
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showUploadModal && uploadProgress?.status !== 'uploading') {
-        setShowUploadModal(false);
-        resetForm();
+      if (e.key === 'Escape') {
+        if (previewingFile) {
+          setPreviewingFile(null);
+          return;
+        }
+        if (showUploadModal && uploadProgress?.status !== 'uploading') {
+          setShowUploadModal(false);
+          resetForm();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showUploadModal, uploadProgress?.status, resetForm]);
+  }, [showUploadModal, uploadProgress?.status, previewingFile, resetForm]);
 
   const filteredFiles = files.filter((f) => {
     if (activeFolder === 'ALL') return true;
     return f.folder === activeFolder;
   });
+
+  const isImageFile = (filename: string) => {
+    const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
+    return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'].includes(ext);
+  };
 
   const getFileIcon = (filename: string) => {
     const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
@@ -337,20 +350,54 @@ export default function FileVault({
             filteredFiles.map((file) => {
               const linkedTask = tasks.find((t) => t.id === file.linked_task_id);
 
+              const isImg = isImageFile(file.name);
+              const hasPreview = Boolean(isImg && file.preview_url);
+
               return (
                 <div
                   key={file.id}
                   className="p-4 hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="h-10 w-10 rounded-xl bg-[var(--color-surface-raised)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
-                      {getFileIcon(file.name)}
-                    </div>
+                    {hasPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewingFile(file)}
+                        title={t('files.preview')}
+                        className="h-10 w-10 rounded-xl overflow-hidden border border-[var(--color-border)] hover:border-indigo-400 shrink-0 relative group/thumb cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={file.preview_url!}
+                          alt={file.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover/thumb:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity text-white">
+                          <Eye className="h-4 w-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="h-10 w-10 rounded-xl bg-[var(--color-surface-raised)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
+                        {getFileIcon(file.name)}
+                      </div>
+                    )}
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[var(--color-text)] truncate group-hover:text-indigo-300 transition-colors">
-                        {file.name}
-                      </p>
+                      {hasPreview ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewingFile(file)}
+                          className="text-left text-sm font-semibold text-[var(--color-text)] truncate group-hover:text-indigo-300 transition-colors block cursor-pointer max-w-full"
+                          title={file.name}
+                        >
+                          {file.name}
+                        </button>
+                      ) : (
+                        <p className="text-sm font-semibold text-[var(--color-text)] truncate group-hover:text-indigo-300 transition-colors">
+                          {file.name}
+                        </p>
+                      )}
                       <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-muted)] flex-wrap">
                         <span className="uppercase text-indigo-400 font-mono font-semibold">
                           {file.folder}
@@ -378,6 +425,18 @@ export default function FileVault({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {hasPreview && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setPreviewingFile(file)}
+                        aria-label={t('files.previewAria', { name: file.name })}
+                        icon={Eye}
+                      >
+                        {t('files.preview')}
+                      </Button>
+                    )}
+
                     <Button
                       variant="secondary"
                       size="sm"
@@ -649,6 +708,86 @@ export default function FileVault({
           }}
           onCancel={() => setFileToDelete(null)}
         />
+      )}
+
+      {/* Modal xem trước hình ảnh phóng to (Image Lightbox Modal) */}
+      {previewingFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="image-preview-modal-title"
+          onClick={() => setPreviewingFile(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4 bg-[var(--color-surface)]">
+              <div className="flex items-center gap-3 min-w-0 pr-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 shrink-0">
+                  <ImageIcon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 id="image-preview-modal-title" className="text-sm font-bold text-[var(--color-text)] truncate max-w-md sm:max-w-xl">
+                    {previewingFile.name}
+                  </h3>
+                  <p className="text-[11px] text-[var(--color-text-muted)] font-mono">
+                    {formatBytes(previewingFile.size)} • {formatDate(previewingFile.created_at)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingFile(null)}
+                aria-label={t('files.previewClose')}
+                className="rounded-xl p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Khung hiển thị ảnh preview */}
+            <div className="relative bg-black/80 p-4 sm:p-6 flex items-center justify-center overflow-auto max-h-[70vh] min-h-[280px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewingFile.preview_url || ''}
+                alt={previewingFile.name}
+                className="max-h-[65vh] w-auto max-w-full object-contain rounded-lg shadow-2xl transition-transform"
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-[var(--color-border)] px-6 py-3.5 bg-[var(--color-surface)] text-xs text-[var(--color-text-muted)] gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <User className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="text-[var(--color-text)] font-medium">
+                  {getSlotDisplayName(previewingFile.uploaded_by, profileNames, t('assignee.unknown'))}
+                </span>
+                <span>•</span>
+                <span className="uppercase text-indigo-400 font-mono font-semibold">{previewingFile.folder}</span>
+              </div>
+              <div className="flex items-center gap-2.5 ml-auto">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleDownload(previewingFile)}
+                  icon={Download}
+                >
+                  {t('files.download')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPreviewingFile(null)}
+                >
+                  {t('common.close')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

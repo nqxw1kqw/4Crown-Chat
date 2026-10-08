@@ -30,26 +30,26 @@ const STORAGE_KEYS = {
   files: '4crown.files',
 };
 
+const SESSION_BOOT_KEY = '4crown.session_booted';
+
 export default function Home() {
   const isMounted = useIsMounted();
   const profile = useLocalProfile();
 
-  // Luồng khởi động: nếu đã có slot danh tính thì vào thẳng app, nếu chưa thì language -> loading -> identity -> app
+  // Luồng khởi động: reload trang (F5) trong phiên giữ nguyên vào thẳng Dashboard/app.
+  // Khi tắt hẳn tab/trình duyệt rồi vào lại thì sessionStorage mất -> chạy lại boot flow từ language.
   const [bootStep, setBootStep] = useState<BootStep>(() => {
     if (typeof window === 'undefined') return 'language';
     try {
-      const raw = localStorage.getItem('gth.profile');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.currentSlotId) {
-          return 'app';
-        }
+      if (sessionStorage.getItem(SESSION_BOOT_KEY) === 'true') {
+        return 'app';
       }
     } catch {}
     return 'language';
   });
   const [showProfileModal, setShowProfileModal] = useState(false);
 
+  // Reload page vẫn luôn hiện trang tổng quan (Dashboard)
   const [currentTab, setCurrentTab] = useState('dashboard');
 
   // Application state (Tải từ localStorage và đồng bộ R2/DB)
@@ -264,8 +264,19 @@ export default function Home() {
     }
   };
 
+  useEffect(() => {
+    if (bootStep === 'app') {
+      try {
+        sessionStorage.setItem(SESSION_BOOT_KEY, 'true');
+      } catch {}
+    }
+  }, [bootStep]);
+
   const handleIdentityConfirm = (updated: LocalProfileState) => {
     saveStoredProfile(updated);
+    try {
+      sessionStorage.setItem(SESSION_BOOT_KEY, 'true');
+    } catch {}
     setBootStep('app');
   };
 
@@ -274,6 +285,9 @@ export default function Home() {
   };
 
   const handleResetIdentity = () => {
+    try {
+      sessionStorage.removeItem(SESSION_BOOT_KEY);
+    } catch {}
     resetStoredProfile();
     setShowProfileModal(false);
     setBootStep('identity');

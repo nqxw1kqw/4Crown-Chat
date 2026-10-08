@@ -48,6 +48,9 @@ export const ja: Record<TranslationKey, string> = {
   'dashboard.latestFiles': '最新ビルド＆アセットファイル',
   'dashboard.noFiles': '保管庫にファイルはまだありません。',
   'dashboard.uploadFile': 'ファイルをアップロード',
+  'dashboard.githubDesc': 'インディーゲームのソースコード＆テストプレイ動画',
+  'dashboard.githubOpen': 'GitHubリポジトリを開く',
+  'dashboard.githubAria': 'GitHubリポジトリを開く: Just-a-Fish-Game',
 
   // Tasks
   'tasks.searchPlaceholder': 'タスクを検索...',
@@ -176,6 +179,10 @@ export const ja: Record<TranslationKey, string> = {
   'files.uploadFirstBtn': '最初のファイルをアップロード',
   'files.download': 'ダウンロード',
   'files.delete': 'ファイルを削除',
+  'files.preview': 'プレビュー',
+  'files.previewAria': '画像「{name}」をプレビュー',
+  'files.previewModalTitle': '画像プレビュー',
+  'files.previewClose': 'プレビューを閉じる',
   'files.uploader': 'アップロード者',
   'files.deleteAria': 'ファイル「{name}」を削除',
   'files.downloadAria': 'ファイル「{name}」をダウンロード',

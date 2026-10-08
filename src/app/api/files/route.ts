@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { listR2Objects, deleteR2Object } from '@/lib/r2/client';
+import { listR2Objects, deleteR2Object, getPresignedVideoGetUrl } from '@/lib/r2/client';
 import { DEFAULT_PROJECT_ID, toProjectUuid } from '@/lib/constants';
 import { FileRecord } from '@/types/database';
+
+function isImageKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return (
+    lower.endsWith('.png') ||
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.svg') ||
+    lower.endsWith('.bmp')
+  );
+}
 
 function isNonMediaFileKey(key: string): boolean {
   const lower = key.toLowerCase();
@@ -140,9 +153,24 @@ export async function GET(req: NextRequest) {
     const merged = [...dbFiles, ...newlySyncedFiles];
     merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+    const filesWithPreviews: FileRecord[] = await Promise.all(
+      merged.map(async (file) => {
+        if (isImageKey(file.file_key || file.name)) {
+          try {
+            const previewUrl = await getPresignedVideoGetUrl(file.file_key, 86400);
+            return { ...file, preview_url: previewUrl };
+          } catch (previewErr) {
+            console.warn('Lỗi tạo preview URL cho file ảnh:', file.file_key, previewErr);
+            return file;
+          }
+        }
+        return file;
+      })
+    );
+
     return NextResponse.json({
       success: true,
-      files: merged,
+      files: filesWithPreviews,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Lỗi nạp danh sách file';

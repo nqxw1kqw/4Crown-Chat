@@ -71,6 +71,7 @@ export interface FileRecord {
   linked_task_id: string | null;
   created_at: string;
   uploader?: Profile | null;
+  preview_url?: string | null;
 }
 
 export interface GameplayVideo {

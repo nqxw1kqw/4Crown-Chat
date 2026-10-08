@@ -46,6 +46,9 @@ export const vi = {
   'dashboard.latestFiles': 'File build & Asset mới nhất',
   'dashboard.noFiles': 'Chưa có file nào trong kho.',
   'dashboard.uploadFile': 'Tải file lên',
+  'dashboard.githubDesc': 'Source code game indie & video test gameplay',
+  'dashboard.githubOpen': 'Mở GitHub Repository',
+  'dashboard.githubAria': 'Mở GitHub Repository: Just-a-Fish-Game',
 
   // Tasks
   'tasks.searchPlaceholder': 'Tìm kiếm task...',
@@ -174,6 +177,10 @@ export const vi = {
   'files.uploadFirstBtn': 'Tải lên File đầu tiên',
   'files.download': 'Tải về',
   'files.delete': 'Xóa file',
+  'files.preview': 'Xem trước',
+  'files.previewAria': 'Xem trước hình ảnh {name}',
+  'files.previewModalTitle': 'Xem trước hình ảnh',
+  'files.previewClose': 'Đóng xem trước',
   'files.uploader': 'Người tải',
   'files.deleteAria': 'Xóa file {name}',
   'files.downloadAria': 'Tải về file {name}',

@@ -84,7 +84,8 @@ export default function Navbar({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-mono hover:underline transition-colors"
-                  title="Mở GitHub Repository: Just-a-Fish-Game"
+                  title={t('dashboard.githubAria')}
+                  aria-label={t('dashboard.githubAria')}
                 >
                 <GithubIcon className="h-3 w-3 shrink-0" />
                   <span>Repo</span>

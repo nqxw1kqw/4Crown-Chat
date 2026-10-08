@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyProjectAccess } from '@/lib/auth-helpers';
-import { completeMultipartUpload } from '@/lib/r2/client';
+import { completeMultipartUpload, getPresignedVideoGetUrl } from '@/lib/r2/client';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { UploadKind } from '@/types/database';
 import { toProjectUuid } from '@/lib/constants';
@@ -183,6 +183,24 @@ export async function POST(req: NextRequest) {
           linked_task_id: metadata?.linkedTaskId || null,
           created_at: new Date().toISOString(),
         };
+      }
+    }
+
+    if (insertedRecord && kind !== 'video') {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.endsWith('.png') ||
+        lowerKey.endsWith('.jpg') ||
+        lowerKey.endsWith('.jpeg') ||
+        lowerKey.endsWith('.webp') ||
+        lowerKey.endsWith('.gif') ||
+        lowerKey.endsWith('.svg') ||
+        lowerKey.endsWith('.bmp')
+      ) {
+        try {
+          const previewUrl = await getPresignedVideoGetUrl(key, 86400);
+          insertedRecord = { ...insertedRecord, preview_url: previewUrl };
+        } catch {}
       }
     }
 

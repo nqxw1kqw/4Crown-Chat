@@ -88,7 +88,7 @@ export default function DashboardOverview({
               </span>
             </h2>
             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              Source code game indie & video test gameplay
+              {t('dashboard.githubDesc')}
             </p>
           </div>
         </div>
@@ -96,10 +96,11 @@ export default function DashboardOverview({
           href="https://github.com/nqxw1kqw/Just-a-Fish-Game"
           target="_blank"
           rel="noopener noreferrer"
+          aria-label={t('dashboard.githubAria')}
           className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-[var(--color-accent)] hover:bg-indigo-500 transition-colors shadow-sm shadow-indigo-600/20 shrink-0 cursor-pointer"
         >
           <GithubIcon className="h-4 w-4" />
-          <span>Mở GitHub Repository</span>
+          <span>{t('dashboard.githubOpen')}</span>
           <ExternalLink className="h-3.5 w-3.5 opacity-80" />
         </a>
       </div>
