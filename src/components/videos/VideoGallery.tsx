@@ -7,13 +7,10 @@ import {
   Play,
   Film,
   AlertTriangle,
-  Clock,
-  HardDrive,
-  CheckCircle2,
   X,
   FileVideo,
 } from 'lucide-react';
-import { GameplayVideo, ProjectRole, Profile } from '@/types/database';
+import { GameplayVideo, ProjectRole } from '@/types/database';
 import { formatBytes, formatDuration, formatDate } from '@/lib/utils';
 import { extractVideoMetadata, uploadLargeFileToR2, UploadProgress } from '@/lib/upload/client-uploader';
 import VideoPlayerModal from './VideoPlayerModal';
@@ -103,7 +100,7 @@ export default function VideoGallery({
 
       // Tạo object mới cập nhật vào state hiển thị ngay
       const newVideoObj: GameplayVideo = {
-        id: `vid-${Date.now()}`,
+        id: `vid-${crypto.randomUUID()}`,
         project_id: projectId,
         version: videoVersion.trim(),
         title: videoTitle.trim(),
@@ -147,7 +144,7 @@ export default function VideoGallery({
         clearInterval(interval);
         setTimeout(() => {
           const newVideoObj: GameplayVideo = {
-            id: `vid-${Date.now()}`,
+            id: `vid-${crypto.randomUUID()}`,
             project_id: projectId,
             version: videoVersion.trim(),
             title: videoTitle.trim(),

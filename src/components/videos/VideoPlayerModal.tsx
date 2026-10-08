@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Play, AlertTriangle, RefreshCw, Download, Calendar, User, HardDrive } from 'lucide-react';
+import { X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { GameplayVideo, ProjectRole } from '@/types/database';
 import { formatBytes, formatDuration, formatDate } from '@/lib/utils';
 
@@ -33,22 +33,18 @@ export default function VideoPlayerModal({
       setLoadingUrl(true);
       setErrorMsg(null);
 
-      // Thử gọi endpoint cấp presigned GET URL
       const res = await fetch(`/api/videos/${video.id}/url`);
       if (res.ok) {
         const data = await res.json();
         setVideoUrl(data.videoUrl);
       } else {
-        // Fallback cho preview local nếu chưa kết nối R2 credentials
         if (video.file_key.startsWith('http')) {
           setVideoUrl(video.file_key);
         } else {
-          // Video demo online mẫu để Shin có thể test phát video mượt mà
           setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
         }
       }
-    } catch (err: unknown) {
-      console.warn('Fallback preview video:', err);
+    } catch {
       setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
     } finally {
       setLoadingUrl(false);
@@ -56,8 +52,34 @@ export default function VideoPlayerModal({
   };
 
   useEffect(() => {
-    fetchSignedUrl();
-  }, [video.id]);
+    let isMounted = true;
+    async function load() {
+      try {
+        const res = await fetch(`/api/videos/${video.id}/url`);
+        if (!isMounted) return;
+        if (res.ok) {
+          const data = await res.json();
+          setVideoUrl(data.videoUrl);
+        } else {
+          if (video.file_key.startsWith('http')) {
+            setVideoUrl(video.file_key);
+          } else {
+            setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setVideoUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4');
+        }
+      } finally {
+        if (isMounted) setLoadingUrl(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [video.id, video.file_key]);
 
   const canDelete = userRole === 'OWNER' || userRole === 'ADMIN';
 

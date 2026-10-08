@@ -77,7 +77,7 @@ export default function TaskDetailModal({
     if (!canEdit || !newChecklistLabel.trim()) return;
 
     const newItem: TaskChecklistItem = {
-      id: `check-${Date.now()}`,
+      id: `check-${crypto.randomUUID()}`,
       task_id: task.id,
       label: newChecklistLabel.trim(),
       done: false,

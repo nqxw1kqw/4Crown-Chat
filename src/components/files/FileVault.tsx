@@ -5,20 +5,14 @@ import {
   FileBox,
   Upload,
   Download,
-  Folder,
   FileArchive,
   Image,
   Music,
-  FileCode,
   File,
   Trash2,
-  Calendar,
-  User,
-  HardDrive,
   X,
-  AlertTriangle,
 } from 'lucide-react';
-import { FileRecord, ProjectRole, Profile, Task, UploadKind } from '@/types/database';
+import { FileRecord, ProjectRole, Task, UploadKind } from '@/types/database';
 import { formatBytes, formatDate } from '@/lib/utils';
 import { uploadLargeFileToR2, UploadProgress } from '@/lib/upload/client-uploader';
 
@@ -117,7 +111,7 @@ export default function FileVault({
       });
 
       const newFileObj: FileRecord = {
-        id: `file-${Date.now()}`,
+        id: `file-${crypto.randomUUID()}`,
         project_id: projectId,
         folder: selectedFolder,
         name: selectedFile.name,
@@ -156,7 +150,7 @@ export default function FileVault({
         clearInterval(interval);
         setTimeout(() => {
           const newFileObj: FileRecord = {
-            id: `file-${Date.now()}`,
+            id: `file-${crypto.randomUUID()}`,
             project_id: projectId,
             folder: selectedFolder,
             name: selectedFile!.name,

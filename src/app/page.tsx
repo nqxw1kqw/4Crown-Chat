@@ -44,7 +44,7 @@ export default function Home() {
   const handleCreateTask = (newTaskData: Omit<Task, 'id' | 'created_at' | 'updated_at'>) => {
     const newTask: Task = {
       ...newTaskData,
-      id: `task-${Date.now()}`,
+      id: `task-${crypto.randomUUID()}`,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -85,9 +85,9 @@ export default function Home() {
   };
 
   const handleAddMember = (displayName: string, role: ProjectRole) => {
-    const newUid = `user-${Date.now()}`;
+    const newUid = `user-${crypto.randomUUID()}`;
     const newM: ProjectMember & { profile: Profile } = {
-      id: `pm-${Date.now()}`,
+      id: `pm-${crypto.randomUUID()}`,
       project_id: currentProject.id,
       user_id: newUid,
       role,
