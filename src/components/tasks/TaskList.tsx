@@ -156,6 +156,25 @@ export default function TaskList({
         )}
       </div>
 
+      {/* Empty State Banner khi chưa có task nào */}
+      {tasks.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-zinc-800 bg-[#12141d]/60 p-8 text-center">
+          <ListTodo className="h-10 w-10 mx-auto text-indigo-400 mb-2 opacity-80" />
+          <h3 className="text-sm font-semibold text-zinc-200">Dự án hiện chưa có task nào</h3>
+          <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
+            Bắt đầu lên danh sách công việc cho team phát triển game bằng cách tạo task đầu tiên nhé.
+          </p>
+          {canCreate && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Bắt đầu tạo task
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Task List Grouped By Status */}
       <div className="space-y-6">
         {STATUS_GROUPS.map((group) => {

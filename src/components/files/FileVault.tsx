@@ -228,8 +228,18 @@ export default function FileVault({
       <div className="rounded-2xl border border-[#1f2330] bg-[#12141d] overflow-hidden shadow-sm">
         <div className="divide-y divide-zinc-800/50">
           {filteredFiles.length === 0 ? (
-            <div className="p-8 text-center text-xs text-zinc-500">
-              Không có file nào trong thư mục này.
+            <div className="p-10 text-center text-xs text-zinc-500">
+              <FileBox className="h-10 w-10 mx-auto text-zinc-600 mb-2 opacity-80" />
+              <p className="text-zinc-300 font-medium">Kho lưu trữ hiện chưa có file nào</p>
+              <p className="mt-1 text-zinc-500">Bạn có thể tải lên file build game (.zip, .exe) hoặc tài nguyên đồ họa/âm thanh.</p>
+              {canUpload && (
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
+                >
+                  <Upload className="h-4 w-4" /> Tải lên File đầu tiên
+                </button>
+              )}
             </div>
           ) : (
             filteredFiles.map((file) => {

@@ -212,7 +212,11 @@ export default function DashboardOverview({
               </button>
             </div>
 
-            {myTasks.length === 0 ? (
+            {tasks.length === 0 ? (
+              <div className="text-center py-8 text-zinc-500 text-xs">
+                Chưa có task nào trong dự án. Bấm &quot;Xem Taskboard&quot; để tạo task đầu tiên!
+              </div>
+            ) : myTasks.length === 0 ? (
               <div className="text-center py-8 text-zinc-500 text-xs">
                 Tuyệt vời! Bạn không còn task nào dang dở.
               </div>

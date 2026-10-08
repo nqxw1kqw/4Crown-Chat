@@ -21,17 +21,34 @@ export default function Home() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [currentRole, setCurrentRole] = useState<ProjectRole>('OWNER');
 
-  // Application state (Mock/Local state with rich game data)
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
-  const [videos, setVideos] = useState<GameplayVideo[]>(MOCK_VIDEOS);
-  const [files, setFiles] = useState<FileRecord[]>(MOCK_FILES);
-  const [members, setMembers] = useState<(ProjectMember & { profile: Profile })[]>(MOCK_MEMBERS);
+  // Application state (Khởi tạo trạng thái trống theo yêu cầu của Shin)
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [videos, setVideos] = useState<GameplayVideo[]>([]);
+  const [files, setFiles] = useState<FileRecord[]>([]);
+  const [members, setMembers] = useState<(ProjectMember & { profile: Profile })[]>([
+    {
+      id: 'pm-1',
+      project_id: 'proj-1',
+      user_id: 'user-shin',
+      role: 'OWNER',
+      created_at: '2026-10-08T00:00:00Z',
+      profile: MOCK_CURRENT_USER,
+    },
+  ]);
 
   // Selected item navigation states
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<GameplayVideo | null>(null);
 
-  const currentProject = MOCK_PROJECTS[0];
+  const currentProject = {
+    id: 'proj-1',
+    name: 'Game Team Project',
+    description: 'Dự án mới sẵn sàng để bắt đầu',
+    status: 'active',
+    created_by: 'user-shin',
+    created_at: '2026-10-08T00:00:00Z',
+    updated_at: '2026-10-08T00:00:00Z',
+  };
   const currentUserId = MOCK_CURRENT_USER.id;
 
   // Task actions

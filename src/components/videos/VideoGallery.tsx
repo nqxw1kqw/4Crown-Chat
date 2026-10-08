@@ -210,6 +210,14 @@ export default function VideoGallery({
           <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
             Tải lên clip test gameplay từ 60fps, hỗ trợ file nặng tới 5GB trực tiếp lên Cloudflare R2 private bucket.
           </p>
+          {canUpload && (
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition-colors"
+            >
+              <Upload className="h-4 w-4" /> Tải lên Video đầu tiên
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
