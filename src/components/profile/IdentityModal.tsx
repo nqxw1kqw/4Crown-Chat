@@ -43,12 +43,12 @@ export default function IdentityModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-[#091E42]/50 p-4 backdrop-blur-md fade-in duration-200"
+      className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/75 p-4 backdrop-blur-md fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="identity-modal-title"
     >
-      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-xl sm:p-8">
+      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-2xl sm:p-8">
         <div
           className="absolute top-4 right-4 flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
           role="group"
@@ -101,12 +101,12 @@ export default function IdentityModal() {
                     aria-pressed={isSelected}
                     className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-brand)]/50 ${
                       isSelected
-                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)]'
-                        : 'border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface)]'
+                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)] ring-1 ring-[var(--color-brand)]'
+                        : 'border-[var(--color-border)] bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-raised)]'
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">
-                      <MemberAvatar slot={slotId} name={DEFAULT_SLOT_NAMES[slotId]} size="sm" />
+                      <MemberAvatar slot={slotId} name={DEFAULT_SLOT_NAMES[slotId]} size="md" />
                       <div className="min-w-0">
                         <span className="mb-0.5 block font-mono text-[10px] font-semibold text-[var(--color-brand)]">
                           {t('profile.slotLabel', { slot: slotId.toUpperCase() })}

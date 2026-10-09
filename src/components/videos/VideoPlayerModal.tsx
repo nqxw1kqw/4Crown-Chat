@@ -95,13 +95,13 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#091E42]/50 p-4 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="video-player-modal-title"
     >
       <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] shadow-xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
           <div className="flex min-w-0 items-center gap-3 pr-4">
             <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 font-mono text-xs font-bold text-[var(--color-brand-hover)]">
               {video.version}
