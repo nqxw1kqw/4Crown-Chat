@@ -77,22 +77,30 @@ export async function listMembers(): Promise<TeamMember[]> {
 export async function attachChecklists(tasks: Task[]): Promise<Task[]> {
   if (tasks.length === 0) return tasks;
 
-  const { data, error } = await db()
-    .from('task_checklist_items')
-    .select('*')
-    .in('task_id', tasks.map((task) => task.id))
-    .order('position', { ascending: true });
+  try {
+    const { data, error } = await db()
+      .from('task_checklist_items')
+      .select('*')
+      .in('task_id', tasks.map((task) => task.id))
+      .order('position', { ascending: true });
 
-  if (error) throw dbError(error);
+    if (error) {
+      console.warn('[checklists] attachChecklists query failed:', error.message);
+      return tasks.map((task) => ({ ...task, checklist: [] }));
+    }
 
-  const grouped = new Map<string, TaskChecklistItem[]>();
-  for (const item of (data ?? []) as TaskChecklistItem[]) {
-    const list = grouped.get(item.task_id);
-    if (list) list.push(item);
-    else grouped.set(item.task_id, [item]);
+    const grouped = new Map<string, TaskChecklistItem[]>();
+    for (const item of (data ?? []) as TaskChecklistItem[]) {
+      const list = grouped.get(item.task_id);
+      if (list) list.push(item);
+      else grouped.set(item.task_id, [item]);
+    }
+
+    return tasks.map((task) => ({ ...task, checklist: grouped.get(task.id) ?? [] }));
+  } catch (err) {
+    console.warn('[checklists] attachChecklists exception:', err);
+    return tasks.map((task) => ({ ...task, checklist: [] }));
   }
-
-  return tasks.map((task) => ({ ...task, checklist: grouped.get(task.id) ?? [] }));
 }
 
 export async function listTasks(): Promise<Task[]> {
@@ -153,18 +161,26 @@ export async function listFiles(): Promise<FileRecord[]> {
 export async function countComments(taskIds: string[]): Promise<Record<string, number>> {
   if (taskIds.length === 0) return {};
 
-  const { data, error } = await db()
-    .from('task_comments')
-    .select('task_id')
-    .in('task_id', taskIds);
+  try {
+    const { data, error } = await db()
+      .from('task_comments')
+      .select('task_id')
+      .in('task_id', taskIds);
 
-  if (error) throw dbError(error);
+    if (error) {
+      console.warn('[comments] countComments query failed:', error.message);
+      return {};
+    }
 
-  const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as { task_id: string }[]) {
-    counts[row.task_id] = (counts[row.task_id] ?? 0) + 1;
+    const counts: Record<string, number> = {};
+    for (const row of (data ?? []) as { task_id: string }[]) {
+      counts[row.task_id] = (counts[row.task_id] ?? 0) + 1;
+    }
+    return counts;
+  } catch (err) {
+    console.warn('[comments] countComments exception:', err);
+    return {};
   }
-  return counts;
 }
 
 export async function getBootstrap(): Promise<BootstrapPayload> {
@@ -235,16 +251,15 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetail> {
       .order('created_at', { ascending: false }),
   ]);
 
-  for (const res of [commentsRes, activityRes, filesRes, videosRes]) {
-    if (res.error) throw dbError(res.error);
-  }
+  if (filesRes.error) console.warn('[taskDetail] files query failed:', filesRes.error.message);
+  if (videosRes.error) console.warn('[taskDetail] videos query failed:', videosRes.error.message);
 
   return {
     task: detailedTask,
-    comments: (commentsRes.data ?? []) as TaskComment[],
-    activity: (activityRes.data ?? []) as TaskActivity[],
-    files: (filesRes.data ?? []) as FileRecord[],
-    videos: (videosRes.data ?? []) as GameplayVideo[],
+    comments: ((commentsRes.data ?? []) as TaskComment[]),
+    activity: ((activityRes.data ?? []) as TaskActivity[]),
+    files: ((filesRes.data ?? []) as FileRecord[]),
+    videos: ((videosRes.data ?? []) as GameplayVideo[]),
   };
 }
 
