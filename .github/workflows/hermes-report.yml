@@ -1,0 +1,29 @@
+name: Hermes report every 15 minutes
+on:
+  schedule:
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hermes-google-sheets-report
+  cancel-in-progress: false
+jobs:
+  report:
+    if: github.event_name == 'workflow_dispatch' || vars.HERMES_REPORT_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Update Google Sheets from new Hermes snapshot
+        env:
+          GOOGLESHEET: ${{ secrets.GOOGLESHEET }}
+          HERMES_REPORT_USERNAME: ${{ secrets.HERMES_REPORT_USERNAME }}
+          HERMES_REPORT_PASSWORD: ${{ secrets.HERMES_REPORT_PASSWORD }}
+          HERMES_SPREADSHEET_ID: 1Hh7AWv8bzlZGti4DfqR5e0dFF43z0mr2mwm964rAk4M
+        run: npx --no-install tsx scripts/hermes-report.ts
