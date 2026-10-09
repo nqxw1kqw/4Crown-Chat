@@ -1,6 +1,9 @@
 import { TranslationKey } from './vi';
 
 export const ja: Record<TranslationKey, string> = {
+  'theme.toggle': '表示テーマを切り替える',
+  'theme.switchLight': 'ライトモードに切り替える',
+  'theme.switchDark': 'ダークモードに切り替える',
   'nav.roleTesting': 'テスト用権限切り替え (RBAC):',
   'nav.roleSwitchTitle': '4段階の権限動作をテストするためのロール切り替え',
   'nav.currentRole': '現在のロール: {role}',

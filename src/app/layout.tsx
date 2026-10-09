@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Be_Vietnam_Pro, Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
+import ThemeProvider from '@/components/providers/ThemeProvider';
 
 // Be Vietnam Pro thiết kế riêng cho dấu thanh tiếng Việt (Inter hay bị lệch/dồn dấu).
 const sansVi = Be_Vietnam_Pro({
@@ -30,10 +31,11 @@ export default function RootLayout({
   return (
     <html
       lang="vi"
+      suppressHydrationWarning
       className={`${sansVi.variable} ${notoSansJP.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[var(--color-bg)] text-[var(--color-text)]">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

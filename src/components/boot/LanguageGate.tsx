@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import ThemeToggle from '@/components/common/ThemeToggle';
 import { Gamepad2, ArrowRight, Check } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { Locale } from '@/i18n/config';
@@ -56,6 +57,7 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
       aria-label={t('boot.language.title')}
     >
       <div className="flex w-full max-w-lg animate-in fade-in zoom-in-95 flex-col items-center gap-8 text-center duration-200">
+        <div className="self-end"><ThemeToggle /></div>
         {/* Brand logo & header */}
         <div className="space-y-3">
           <div

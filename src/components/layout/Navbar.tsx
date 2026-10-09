@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import ThemeToggle from '@/components/common/ThemeToggle';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -114,6 +115,7 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
           </nav>
 
           <div className="flex flex-1 items-center justify-end gap-2">
+            <ThemeToggle />
             <Button size="sm" onClick={openCreateTask} className="hidden sm:inline-flex">
               <Plus className="size-4" />
               {t('tasks.createTaskShort')}

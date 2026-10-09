@@ -1,4 +1,7 @@
 export const vi = {
+  'theme.toggle': 'Đổi giao diện sáng/tối',
+  'theme.switchLight': 'Chuyển sang giao diện sáng',
+  'theme.switchDark': 'Chuyển sang giao diện tối',
   'nav.roleTesting': 'Chuyển vai trò test (RBAC):',
   'nav.roleSwitchTitle': 'Chuyển đổi vai trò để kiểm thử phân quyền 4 Roles',
   'nav.currentRole': 'Vai trò hiện tại: {role}',
