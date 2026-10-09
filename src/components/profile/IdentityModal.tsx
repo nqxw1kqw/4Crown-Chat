@@ -8,6 +8,7 @@ import { useAppData } from '@/components/providers/AppDataProvider';
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/Button';
 import MemberAvatar from '@/components/common/member-avatar';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 export default function IdentityModal() {
   const { locale, setLocale, t } = useLocale();
@@ -42,28 +43,31 @@ export default function IdentityModal() {
       aria-modal="true"
       aria-labelledby="identity-modal-title"
     >
-      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-xl sm:p-8">
-        <div
-          className="absolute top-4 right-4 flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
-          role="group"
-          aria-label={t('nav.languageSwitch')}
-        >
-          {(['vi', 'ja'] as const).map((lang) => (
-            <button
-              key={lang}
-              type="button"
-              onClick={() => setLocale(lang)}
-              className={`cursor-pointer rounded px-2.5 py-1 font-medium transition-colors ${
-                locale === lang
-                  ? 'bg-[var(--color-brand)] text-white'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-              }`}
-              aria-pressed={locale === lang}
-              title={lang === 'vi' ? 'Tiếng Việt' : '日本語'}
-            >
-              {lang.toUpperCase()}
-            </button>
-          ))}
+      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl sm:p-8">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <ThemeToggle />
+          <div
+            className="flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
+            role="group"
+            aria-label={t('nav.languageSwitch')}
+          >
+            {(['vi', 'ja'] as const).map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setLocale(lang)}
+                className={`cursor-pointer rounded px-2.5 py-1 font-medium transition-colors ${
+                  locale === lang
+                    ? 'bg-[var(--color-brand)] text-white'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+                }`}
+                aria-pressed={locale === lang}
+                title={lang === 'vi' ? 'Tiếng Việt' : '日本語'}
+              >
+                {lang.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-col items-center gap-2 pt-2 text-center sm:pt-0">

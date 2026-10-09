@@ -96,7 +96,7 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
       aria-labelledby="video-player-modal-title"
     >
       <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] shadow-xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
           <div className="flex min-w-0 items-center gap-3 pr-4">
             <span className="rounded-md bg-[var(--color-brand-soft)] px-2 py-0.5 font-mono text-xs font-bold text-[var(--color-brand-hover)]">
               {video.version}

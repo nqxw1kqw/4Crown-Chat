@@ -46,6 +46,10 @@ export const vi = {
   'nav.mainNavigation': 'Điều hướng chính',
   'nav.mobileNavigation': 'Điều hướng nhanh di động',
   'nav.languageSwitch': 'Chuyển đổi ngôn ngữ',
+  'theme.toggle': 'Giao diện hiển thị',
+  'theme.light': 'Chế độ sáng',
+  'theme.dark': 'Chế độ tối',
+  'theme.system': 'Theo hệ thống',
 
   // Dashboard
   'dashboard.progress': 'Tiến độ dự án',

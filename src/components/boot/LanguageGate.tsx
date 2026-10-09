@@ -5,6 +5,7 @@ import { Gamepad2, ArrowRight, Check } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { Locale } from '@/i18n/config';
 import { Button } from '@/components/ui/Button';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 interface LanguageGateProps {
   onContinue: () => void;
@@ -55,6 +56,9 @@ export default function LanguageGate({ onContinue }: LanguageGateProps) {
       role="region"
       aria-label={t('boot.language.title')}
     >
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="flex w-full max-w-lg animate-in fade-in zoom-in-95 flex-col items-center gap-8 text-center duration-200">
         {/* Brand logo & header */}
         <div className="space-y-3">
