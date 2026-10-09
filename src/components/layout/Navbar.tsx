@@ -31,7 +31,6 @@ import MemberAvatar, { MemberAvatarStack } from '@/components/common/member-avat
 import { RoleBadge } from '@/components/common/badges';
 import { useLocale } from '@/i18n/useLocale';
 import { useAppData } from '@/components/providers/AppDataProvider';
-import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
@@ -133,9 +132,6 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
                 </TooltipContent>
               </Tooltip>
             )}
-
-            {/* Theme */}
-            <ThemeToggle />
 
             {/* Language */}
             <div

@@ -29,7 +29,7 @@ export default function MemberAvatar({ slot, name, size = 'md', className, toolt
   const initials = (name ?? '?').trim().slice(0, 1).toUpperCase();
   const avatar = (
     <Avatar className={cn('shrink-0', SIZES[size], className)}>
-      <AvatarImage src={memberAvatarUri(slot)} alt={name ?? ''} className="object-cover" />
+      <AvatarImage src={memberAvatarUri(slot)} alt={name ?? ''} />
       <AvatarFallback className="bg-[var(--color-surface-raised)] font-semibold text-[var(--color-text-muted)]">
         {initials}
       </AvatarFallback>

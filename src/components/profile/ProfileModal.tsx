@@ -130,8 +130,8 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
       aria-modal="true"
       aria-labelledby="profile-modal-title"
     >
-      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] shadow-xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-6 py-4">
           <div className="flex items-center gap-3">
             <MemberAvatar slot={session.slot} name={currentMemberName} size="md" />
             <div>

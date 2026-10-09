@@ -16,11 +16,11 @@ export interface SessionPayload {
 }
 
 function getSecret(): string {
-  const secret = process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (secret && secret.length >= 32) {
-    return secret;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('SESSION_SECRET is missing or shorter than 32 characters');
   }
-  return '4crown-chat-default-session-hmac-secret-key-32chars-min';
+  return secret;
 }
 
 function sign(body: string): string {

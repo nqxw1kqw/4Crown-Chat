@@ -40,31 +40,22 @@ export async function POST(req: NextRequest) {
     const checklist = body.checklist === undefined ? [] : parseChecklist(body.checklist);
 
     const client = db();
-    const taskPayload: Record<string, unknown> = {
-      project_id: PROJECT_ID,
-      title,
-      description,
-      status,
-      priority,
-      tag,
-      assignee_id: assigneeId,
-      creator_id: session.userId,
-      progress: 0,
-      deadline,
-    };
-
-    let { data: created, error } = await client
+    const { data: created, error } = await client
       .from('tasks')
-      .insert(taskPayload)
+      .insert({
+        project_id: PROJECT_ID,
+        title,
+        description,
+        status,
+        priority,
+        tag,
+        assignee_id: assigneeId,
+        creator_id: session.userId,
+        progress: 0,
+        deadline,
+      })
       .select('*')
       .single();
-
-    if (error && (error.message.includes('tag') || (error as { code?: string }).code === 'PGRST204')) {
-      delete taskPayload.tag;
-      const retry = await client.from('tasks').insert(taskPayload).select('*').single();
-      created = retry.data;
-      error = retry.error;
-    }
 
     if (error) throw new Error(error.message);
 

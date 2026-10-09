@@ -48,10 +48,6 @@ export const ja: Record<TranslationKey, string> = {
   'nav.mainNavigation': 'メインナビゲーション',
   'nav.mobileNavigation': 'モバイル簡易ナビゲーション',
   'nav.languageSwitch': '言語の切り替え',
-  'theme.toggle': 'テーマ表示',
-  'theme.light': 'ライトモード',
-  'theme.dark': 'ダークモード',
-  'theme.system': 'システム設定',
 
   // Dashboard
   'dashboard.progress': 'プロジェクト進捗',

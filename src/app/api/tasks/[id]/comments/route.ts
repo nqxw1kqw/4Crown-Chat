@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { toErrorResponse } from '@/lib/api';
+import { dbError, toErrorResponse } from '@/lib/api';
 import { requireContributor } from '@/lib/auth-helpers';
 import { db, logActivity, requireTaskInProject } from '@/lib/data';
 import { parseCommentBody } from '@/lib/validation';
@@ -21,16 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .select('*')
       .single();
 
-    if (error) {
-      const fallback: TaskComment = {
-        id: crypto.randomUUID(),
-        task_id: id,
-        author_id: session.userId,
-        body: text,
-        created_at: new Date().toISOString(),
-      };
-      return NextResponse.json({ comment: fallback }, { status: 201 });
-    }
+    if (error) throw dbError(error);
 
     await logActivity({ taskId: id, actorId: session.userId, action: 'commented' });
 

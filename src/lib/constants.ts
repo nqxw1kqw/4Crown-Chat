@@ -28,10 +28,10 @@ export const MIN_PART_SIZE = 5 * 1024 * 1024; // 5MB
 
 export const TASK_STATUS_CONFIG = {
   TODO: { color: 'bg-[var(--color-surface-raised)] text-[var(--color-text-muted)] border-[var(--color-border-strong)]' },
-  IN_PROGRESS: { color: 'bg-[var(--color-brand-soft)] text-[var(--color-brand)] border-[var(--color-brand)]/30' },
-  REVIEW: { color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)] border-[var(--color-warning)]/30' },
-  DONE: { color: 'bg-[var(--color-success-soft)] text-[var(--color-success-text)] border-[var(--color-success)]/40' },
-  BLOCKED: { color: 'bg-[var(--color-danger-soft)] text-[var(--color-danger)] border-[var(--color-danger)]/30' },
+  IN_PROGRESS: { color: 'bg-[#1868DB]/10 text-[var(--color-info)] border-[#1868DB]/30' },
+  REVIEW: { color: 'bg-[#FFF0B3] text-[var(--color-warning)] border-[#974F0C]/30' },
+  DONE: { color: 'bg-[#94C748]/20 text-[var(--color-success-text)] border-[#94C748]/50' },
+  BLOCKED: { color: 'bg-[#CA3521]/8 text-[var(--color-danger)] border-[#CA3521]/30' },
 } as const;
 
 export const TASK_PRIORITY_CONFIG = {
@@ -45,11 +45,11 @@ export const TASK_TAGS = ['code', 'art', 'design', 'audio', 'qa', 'other'] as co
 export type TaskTag = (typeof TASK_TAGS)[number];
 
 export const TASK_TAG_COLORS: Record<TaskTag, string> = {
-  code: 'bg-[#E9F2FF] text-[#0055CC] border-[#1868DB]/30 dark:bg-[#132a48] dark:text-[#58a6ff] dark:border-[#388bfd]/30',
-  art: 'bg-[#EAE6FF] text-[#5E4DB2] border-[#5E4DB2]/30 dark:bg-[#271d47] dark:text-[#bc8cff] dark:border-[#a371f7]/30',
-  design: 'bg-[#E6FCFF] text-[#008DA6] border-[#008DA6]/30 dark:bg-[#0c313a] dark:text-[#39c5cf] dark:border-[#39c5cf]/30',
-  audio: 'bg-[#F3FAE7] text-[#3F6B12] border-[#94C748]/50 dark:bg-[#1a2d14] dark:text-[#7ee787] dark:border-[#56d364]/40',
-  qa: 'bg-[#FFF0B3] text-[#974F0C] border-[#974F0C]/30 dark:bg-[#322309] dark:text-[#e3b341] dark:border-[#d29922]/30',
+  code: 'bg-[#E9F2FF] text-[#0055CC] border-[#1868DB]/30',
+  art: 'bg-[#EAE6FF] text-[#5E4DB2] border-[#5E4DB2]/30',
+  design: 'bg-[#E6FCFF] text-[#008DA6] border-[#008DA6]/30',
+  audio: 'bg-[#F3FAE7] text-[#3F6B12] border-[#94C748]/50',
+  qa: 'bg-[#FFF0B3] text-[#974F0C] border-[#974F0C]/30',
   other: 'bg-[var(--color-surface-raised)] text-[var(--color-text-muted)] border-[var(--color-border-strong)]',
 };
 

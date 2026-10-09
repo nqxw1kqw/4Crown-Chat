@@ -81,35 +81,22 @@ export async function POST(req: NextRequest) {
           ? Math.min(metadata.duration, 24 * 3600)
           : 0;
 
-      const videoPayload: Record<string, unknown> = {
-        project_id: PROJECT_ID,
-        version: text(metadata.version, '1.0', 40),
-        title: text(metadata.title, upload.key.split('/').pop() ?? 'Gameplay Video', 200),
-        description: text(metadata.description, '', 10_000),
-        file_key: upload.key,
-        thumbnail_key: thumbnailKey,
-        duration,
-        size: upload.size,
-        uploaded_by: session.userId,
-        linked_task_id: linkedTaskId,
-      };
-
-      let { data, error } = await client
+      const { data, error } = await client
         .from('gameplay_videos')
-        .insert(videoPayload)
+        .insert({
+          project_id: PROJECT_ID,
+          version: text(metadata.version, '1.0', 40),
+          title: text(metadata.title, upload.key.split('/').pop() ?? 'Gameplay Video', 200),
+          description: text(metadata.description, '', 10_000),
+          file_key: upload.key,
+          thumbnail_key: thumbnailKey,
+          duration,
+          size: upload.size,
+          uploaded_by: session.userId,
+          linked_task_id: linkedTaskId,
+        })
         .select('*')
         .single();
-
-      if (error && (error.message.includes('linked_task_id') || (error as { code?: string }).code === 'PGRST204')) {
-        delete videoPayload.linked_task_id;
-        const retry = await client
-          .from('gameplay_videos')
-          .insert(videoPayload)
-          .select('*')
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
 
       if (error) throw dbError(error);
       record = data;

@@ -1,20 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, Loader2, ArrowRight } from 'lucide-react';
+import { Check, KeyRound, Loader2, ArrowRight } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/Button';
+import { FieldInput } from '@/components/common/form';
 import MemberAvatar from '@/components/common/member-avatar';
-import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 export default function IdentityModal() {
   const { locale, setLocale, t } = useLocale();
   const { login } = useAppData();
 
   const [selectedSlot, setSelectedSlot] = useState<SlotId>('m1');
+  const [passcode, setPasscode] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,10 +26,14 @@ export default function IdentityModal() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      await login(selectedSlot);
+      await login(selectedSlot, passcode);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 429) {
         setErrorMessage(t('identity.errorRateLimited'));
+      } else if (err instanceof ApiClientError && err.status === 401) {
+        setErrorMessage(t('identity.errorInvalid'));
+      } else if (err instanceof ApiClientError && err.code === 'unconfigured') {
+        setErrorMessage(t('boot.errorUnconfigured'));
       } else {
         setErrorMessage(t('boot.errorGeneric'));
       }
@@ -43,31 +48,28 @@ export default function IdentityModal() {
       aria-modal="true"
       aria-labelledby="identity-modal-title"
     >
-      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-6 shadow-xl sm:p-8">
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <ThemeToggle />
-          <div
-            className="flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
-            role="group"
-            aria-label={t('nav.languageSwitch')}
-          >
-            {(['vi', 'ja'] as const).map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => setLocale(lang)}
-                className={`cursor-pointer rounded px-2.5 py-1 font-medium transition-colors ${
-                  locale === lang
-                    ? 'bg-[var(--color-brand)] text-white'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                }`}
-                aria-pressed={locale === lang}
-                title={lang === 'vi' ? 'Tiếng Việt' : '日本語'}
-              >
-                {lang.toUpperCase()}
-              </button>
-            ))}
-          </div>
+      <div className="relative flex w-full max-w-xl flex-col gap-6 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white p-6 shadow-xl sm:p-8">
+        <div
+          className="absolute top-4 right-4 flex items-center gap-0.5 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5 text-xs"
+          role="group"
+          aria-label={t('nav.languageSwitch')}
+        >
+          {(['vi', 'ja'] as const).map((lang) => (
+            <button
+              key={lang}
+              type="button"
+              onClick={() => setLocale(lang)}
+              className={`cursor-pointer rounded px-2.5 py-1 font-medium transition-colors ${
+                locale === lang
+                  ? 'bg-[var(--color-brand)] text-white'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+              aria-pressed={locale === lang}
+              title={lang === 'vi' ? 'Tiếng Việt' : '日本語'}
+            >
+              {lang.toUpperCase()}
+            </button>
+          ))}
         </div>
 
         <div className="flex flex-col items-center gap-2 pt-2 text-center sm:pt-0">
@@ -130,6 +132,22 @@ export default function IdentityModal() {
             </div>
           </div>
 
+          <FieldInput
+            id="team-passcode"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            label={t('identity.passcodeLabel')}
+            placeholder={t('identity.passcodePlaceholder')}
+            className="text-sm"
+          />
+          <p className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)]">
+            <KeyRound className="size-3.5" />
+            {t('identity.passcodeHint')}
+          </p>
+
           {errorMessage && (
             <p
               role="alert"
@@ -143,7 +161,7 @@ export default function IdentityModal() {
             type="submit"
             size="lg"
             className="w-full justify-center"
-            disabled={submitting || !selectedSlot}
+            disabled={submitting || !passcode}
           >
             {submitting ? (
               <Loader2 className="size-4 animate-spin" />

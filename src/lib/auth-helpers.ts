@@ -1,5 +1,5 @@
 import { getSession, type SessionPayload } from '@/lib/session';
-import { ApiError } from '@/lib/api';
+import { ApiError, dbError } from '@/lib/api';
 import { db } from '@/lib/data';
 import { PROJECT_ID } from '@/lib/constants';
 import { atLeast, ROLE_RANK } from '@/lib/permissions';
@@ -23,25 +23,18 @@ export async function requireSession(): Promise<SessionPayload> {
  * nên sau khi OWNER đổi vai trò thì phải đọc lại DB mới có hiệu lực ngay.
  */
 export async function currentRole(session: SessionPayload): Promise<ProjectRole> {
-  try {
-    const { data, error } = await db()
-      .from('project_members')
-      .select('role')
-      .eq('project_id', PROJECT_ID)
-      .eq('user_id', session.userId)
-      .maybeSingle();
+  const { data, error } = await db()
+    .from('project_members')
+    .select('role')
+    .eq('project_id', PROJECT_ID)
+    .eq('user_id', session.userId)
+    .maybeSingle();
 
-    if (!error && data?.role && data.role in ROLE_RANK) {
-      return data.role as ProjectRole;
-    }
-  } catch (err) {
-    console.warn('currentRole fallback to session.role:', err);
-  }
-
-  if (session.role && session.role in ROLE_RANK) {
-    return session.role;
-  }
-  return 'MEMBER';
+  if (error) throw dbError(error);
+  const role = data?.role as ProjectRole | undefined;
+  // Slot đã bị Chủ dự án xoá khỏi team -> mất tư cách ghi dù cookie còn hạn.
+  if (!role || !(role in ROLE_RANK)) throw new ApiError(403, 'forbidden', 'not-a-member');
+  return role;
 }
 
 export interface Principal {
