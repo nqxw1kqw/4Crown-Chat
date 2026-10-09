@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import ThemeToggle from '@/components/common/ThemeToggle';
+import NotificationBell from '@/components/layout/NotificationBell';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
@@ -116,6 +117,7 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
 
           <div className="flex flex-1 items-center justify-end gap-2">
             <ThemeToggle />
+            <NotificationBell />
             <Button size="sm" onClick={openCreateTask} className="hidden sm:inline-flex">
               <Plus className="size-4" />
               {t('tasks.createTaskShort')}

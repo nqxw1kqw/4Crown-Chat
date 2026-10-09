@@ -23,7 +23,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (error) throw dbError(error);
 
-    await logActivity({ taskId: id, actorId: session.userId, action: 'commented' });
+    await logActivity({
+      taskId: id,
+      actorId: session.userId,
+      action: 'commented',
+      to: text.slice(0, 150),
+    });
 
     return NextResponse.json({ comment: created as TaskComment }, { status: 201 });
   } catch (err) {
