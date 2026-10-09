@@ -18,7 +18,10 @@ import {
 export async function GET() {
   try {
     await requireSession();
-    return NextResponse.json({ tasks: await listTasks() });
+    const tasks = await listTasks();
+    const res = NextResponse.json({ tasks });
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res;
   } catch (err) {
     return toErrorResponse(err);
   }

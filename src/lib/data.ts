@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { syncR2Objects } from '@/lib/r2/sync';
-import { isSlotId, PROJECT_ID } from '@/lib/constants';
+import { isSlotId, PROJECT_ID, USER_ID_TO_SLOT, DEFAULT_SLOT_NAMES } from '@/lib/constants';
 import { ApiError, dbError } from '@/lib/api';
 import { assertProjectKey, getPresignedVideoGetUrl } from '@/lib/r2/client';
 
@@ -38,7 +38,7 @@ export async function getProject(): Promise<Project> {
 export async function listMembers(): Promise<TeamMember[]> {
   const { data, error } = await db()
     .from('project_members')
-    .select('role, user_id, profiles(id, slot, display_name)')
+    .select('role, user_id, profiles(*)')
     .eq('project_id', PROJECT_ID);
 
   if (error) throw dbError(error);
@@ -51,15 +51,22 @@ export async function listMembers(): Promise<TeamMember[]> {
         | null
         | undefined;
 
-      if (!profile || typeof profile.id !== 'string' || !isSlotId(profile.slot)) return null;
+      if (!profile || typeof profile.id !== 'string') return null;
 
+      const slot = isSlotId(profile.slot)
+        ? profile.slot
+        : (USER_ID_TO_SLOT[profile.id] ?? (isSlotId(row.user_id) ? row.user_id : null));
+
+      if (!slot) return null;
+
+      const defaultName = DEFAULT_SLOT_NAMES[slot] ?? slot;
       return {
         id: profile.id,
-        slot: profile.slot,
+        slot,
         display_name:
           typeof profile.display_name === 'string' && profile.display_name
             ? profile.display_name
-            : profile.slot,
+            : defaultName,
         role: row.role,
       };
     })

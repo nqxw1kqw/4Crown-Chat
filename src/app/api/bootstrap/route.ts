@@ -17,7 +17,10 @@ export async function GET(req: NextRequest) {
     }
 
     await requireSession();
-    return NextResponse.json(await getBootstrap());
+    const payload = await getBootstrap();
+    const res = NextResponse.json(payload);
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res;
   } catch (err) {
     return toErrorResponse(err);
   }
