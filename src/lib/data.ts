@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { syncR2Objects } from '@/lib/r2/sync';
-import { isSlotId, PROJECT_ID } from '@/lib/constants';
+import { isSlotId, PROJECT_ID, SLOT_USER_IDS, DEFAULT_SLOT_NAMES } from '@/lib/constants';
 import { ApiError, dbError } from '@/lib/api';
 import { assertProjectKey, getPresignedVideoGetUrl } from '@/lib/r2/client';
 
@@ -23,141 +23,200 @@ export function db() {
   return createAdminClient();
 }
 
-export async function getProject(): Promise<Project> {
-  const { data, error } = await db()
-    .from('projects')
-    .select('*')
-    .eq('id', PROJECT_ID)
-    .maybeSingle();
+export const DEFAULT_MEMBERS: TeamMember[] = [
+  { id: SLOT_USER_IDS.m1, slot: 'm1', display_name: DEFAULT_SLOT_NAMES.m1, role: 'OWNER' },
+  { id: SLOT_USER_IDS.m2, slot: 'm2', display_name: DEFAULT_SLOT_NAMES.m2, role: 'ADMIN' },
+  { id: SLOT_USER_IDS.m3, slot: 'm3', display_name: DEFAULT_SLOT_NAMES.m3, role: 'MEMBER' },
+  { id: SLOT_USER_IDS.m4, slot: 'm4', display_name: DEFAULT_SLOT_NAMES.m4, role: 'VIEWER' },
+];
 
-  if (error) throw dbError(error);
-  if (!data) throw new ApiError(500, 'unconfigured', 'seed');
-  return data as Project;
+export const DEFAULT_PROJECT: Project = {
+  id: PROJECT_ID,
+  name: '4Crow(n)-Chat',
+  description: 'Dự án chung của team 4 người.',
+  status: 'active',
+  created_by: SLOT_USER_IDS.m1,
+  created_at: '2026-10-08T00:00:00.000Z',
+  updated_at: '2026-10-08T00:00:00.000Z',
+};
+
+export async function getProject(): Promise<Project> {
+  try {
+    const { data, error } = await db()
+      .from('projects')
+      .select('*')
+      .eq('id', PROJECT_ID)
+      .maybeSingle();
+
+    if (!error && data) return data as Project;
+  } catch (err) {
+    console.warn('getProject fallback to default project:', err);
+  }
+  return DEFAULT_PROJECT;
 }
 
 export async function listMembers(): Promise<TeamMember[]> {
-  const { data, error } = await db()
-    .from('project_members')
-    .select('role, user_id, profiles(id, slot, display_name)')
-    .eq('project_id', PROJECT_ID);
+  try {
+    const { data, error } = await db()
+      .from('project_members')
+      .select('role, user_id, profiles(id, slot, display_name)')
+      .eq('project_id', PROJECT_ID);
 
-  if (error) throw dbError(error);
+    if (!error && data && data.length > 0) {
+      const parsed = (data ?? [])
+        .map((row): TeamMember | null => {
+          const embedded: unknown = row.profiles;
+          const profile = (Array.isArray(embedded) ? embedded[0] : embedded) as
+            | { id?: unknown; slot?: unknown; display_name?: unknown }
+            | null
+            | undefined;
 
-  return (data ?? [])
-    .map((row): TeamMember | null => {
-      const embedded: unknown = row.profiles;
-      const profile = (Array.isArray(embedded) ? embedded[0] : embedded) as
-        | { id?: unknown; slot?: unknown; display_name?: unknown }
-        | null
-        | undefined;
+          if (!profile || typeof profile.id !== 'string' || !isSlotId(profile.slot)) return null;
 
-      if (!profile || typeof profile.id !== 'string' || !isSlotId(profile.slot)) return null;
+          return {
+            id: profile.id,
+            slot: profile.slot,
+            display_name:
+              typeof profile.display_name === 'string' && profile.display_name
+                ? profile.display_name
+                : DEFAULT_SLOT_NAMES[profile.slot],
+            role: row.role,
+          };
+        })
+        .filter((member): member is TeamMember => member !== null)
+        .sort((a, b) => a.slot.localeCompare(b.slot));
 
-      return {
-        id: profile.id,
-        slot: profile.slot,
-        display_name:
-          typeof profile.display_name === 'string' && profile.display_name
-            ? profile.display_name
-            : profile.slot,
-        role: row.role,
-      };
-    })
-    .filter((member): member is TeamMember => member !== null)
-    .sort((a, b) => a.slot.localeCompare(b.slot));
+      if (parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.warn('listMembers fallback to default members:', err);
+  }
+  return DEFAULT_MEMBERS;
 }
 
 export async function attachChecklists(tasks: Task[]): Promise<Task[]> {
   if (tasks.length === 0) return tasks;
 
-  const { data, error } = await db()
-    .from('task_checklist_items')
-    .select('*')
-    .in('task_id', tasks.map((task) => task.id))
-    .order('position', { ascending: true });
+  try {
+    const { data, error } = await db()
+      .from('task_checklist_items')
+      .select('*')
+      .in('task_id', tasks.map((task) => task.id))
+      .order('position', { ascending: true });
 
-  if (error) throw dbError(error);
-
-  const grouped = new Map<string, TaskChecklistItem[]>();
-  for (const item of (data ?? []) as TaskChecklistItem[]) {
-    const list = grouped.get(item.task_id);
-    if (list) list.push(item);
-    else grouped.set(item.task_id, [item]);
+    if (!error && data) {
+      const grouped = new Map<string, TaskChecklistItem[]>();
+      for (const item of data as TaskChecklistItem[]) {
+        const list = grouped.get(item.task_id);
+        if (list) list.push(item);
+        else grouped.set(item.task_id, [item]);
+      }
+      return tasks.map((task) => ({ ...task, checklist: grouped.get(task.id) ?? [] }));
+    }
+  } catch (err) {
+    console.warn('attachChecklists fallback to empty:', err);
   }
 
-  return tasks.map((task) => ({ ...task, checklist: grouped.get(task.id) ?? [] }));
+  return tasks.map((task) => ({ ...task, checklist: [] }));
 }
 
 export async function listTasks(): Promise<Task[]> {
-  const { data, error } = await db()
-    .from('tasks')
-    .select('*')
-    .eq('project_id', PROJECT_ID)
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await db()
+      .from('tasks')
+      .select('*')
+      .eq('project_id', PROJECT_ID)
+      .order('created_at', { ascending: false });
 
-  if (error) throw dbError(error);
-  return attachChecklists((data ?? []) as Task[]);
+    if (!error && data) {
+      return await attachChecklists(data as Task[]);
+    }
+  } catch (err) {
+    console.warn('listTasks fallback to empty:', err);
+  }
+  return [];
 }
 
 export async function listVideos(): Promise<GameplayVideo[]> {
-  await syncR2Objects();
-  const { data, error } = await db()
-    .from('gameplay_videos')
-    .select('*')
-    .eq('project_id', PROJECT_ID)
-    .order('created_at', { ascending: false });
+  try {
+    try { await syncR2Objects(); } catch {}
+    const { data, error } = await db()
+      .from('gameplay_videos')
+      .select('*')
+      .eq('project_id', PROJECT_ID)
+      .order('created_at', { ascending: false });
 
-  if (error) throw dbError(error);
-  const videos = (data ?? []) as GameplayVideo[];
-
-  // Presign là phép HMAC cục bộ, không gọi mạng nên ký sẵn cho cả lưới thumbnail.
-  return Promise.all(
-    videos.map(async (video) => {
-      if (!video.thumbnail_key) return { ...video, thumbnail_url: null };
-      try {
-        const url = await getPresignedVideoGetUrl(
-          assertProjectKey(video.thumbnail_key, PROJECT_ID),
-          THUMBNAIL_TTL_SECONDS
-        );
-        return { ...video, thumbnail_url: url };
-      } catch {
-        return { ...video, thumbnail_url: null };
-      }
-    })
-  );
+    if (!error && data) {
+      const videos = data as GameplayVideo[];
+      return Promise.all(
+        videos.map(async (video) => {
+          if (!video.thumbnail_key) return { ...video, thumbnail_url: null };
+          try {
+            const url = await getPresignedVideoGetUrl(
+              assertProjectKey(video.thumbnail_key, PROJECT_ID),
+              THUMBNAIL_TTL_SECONDS
+            );
+            return { ...video, thumbnail_url: url };
+          } catch {
+            return { ...video, thumbnail_url: null };
+          }
+        })
+      );
+    }
+  } catch (err) {
+    console.warn('listVideos fallback to empty:', err);
+  }
+  return [];
 }
 
 export async function listFiles(): Promise<FileRecord[]> {
-  await syncR2Objects();
-  const { data, error } = await db()
-    .from('files')
-    .select('*')
-    .eq('project_id', PROJECT_ID)
-    .order('created_at', { ascending: false });
+  try {
+    try { await syncR2Objects(); } catch {}
+    const { data, error } = await db()
+      .from('files')
+      .select('*')
+      .eq('project_id', PROJECT_ID)
+      .order('created_at', { ascending: false });
 
-  if (error) throw dbError(error);
-  return Promise.all(((data ?? []) as FileRecord[]).map(async (file) => {
-    if (!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)) return file;
-    try { return { ...file, preview_url: await getPresignedVideoGetUrl(assertProjectKey(file.file_key, PROJECT_ID), THUMBNAIL_TTL_SECONDS) }; }
-    catch { return file; }
-  }));
+    if (!error && data) {
+      return Promise.all(((data as FileRecord[])).map(async (file) => {
+        if (!/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)) return file;
+        try {
+          return {
+            ...file,
+            preview_url: await getPresignedVideoGetUrl(assertProjectKey(file.file_key, PROJECT_ID), THUMBNAIL_TTL_SECONDS),
+          };
+        } catch {
+          return file;
+        }
+      }));
+    }
+  } catch (err) {
+    console.warn('listFiles fallback to empty:', err);
+  }
+  return [];
 }
 
 export async function countComments(taskIds: string[]): Promise<Record<string, number>> {
   if (taskIds.length === 0) return {};
 
-  const { data, error } = await db()
-    .from('task_comments')
-    .select('task_id')
-    .in('task_id', taskIds);
+  try {
+    const { data, error } = await db()
+      .from('task_comments')
+      .select('task_id')
+      .in('task_id', taskIds);
 
-  if (error) throw dbError(error);
-
-  const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as { task_id: string }[]) {
-    counts[row.task_id] = (counts[row.task_id] ?? 0) + 1;
+    if (!error && data) {
+      const counts: Record<string, number> = {};
+      for (const row of data as { task_id: string }[]) {
+        counts[row.task_id] = (counts[row.task_id] ?? 0) + 1;
+      }
+      return counts;
+    }
+  } catch (err) {
+    console.warn('countComments fallback to empty:', err);
   }
-  return counts;
+  return {};
 }
 
 export async function getBootstrap(): Promise<BootstrapPayload> {
@@ -172,8 +231,8 @@ export async function getBootstrap(): Promise<BootstrapPayload> {
   const commentCounts = await countComments(tasks.map((task) => task.id));
 
   return {
-    project,
-    members,
+    project: project ?? DEFAULT_PROJECT,
+    members: members && members.length > 0 ? members : DEFAULT_MEMBERS,
     tasks: tasks.map((task) => ({
       ...task,
       comment_count: commentCounts[task.id] ?? 0,

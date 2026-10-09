@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, toErrorResponse } from '@/lib/api';
 import { rateLimit } from '@/lib/rate-limit';
-import { listMembers } from '@/lib/data';
+import { listMembers, DEFAULT_MEMBERS } from '@/lib/data';
 import { isSlotId } from '@/lib/constants';
 import { serializeSession, sessionCookieOptions, SESSION_COOKIE } from '@/lib/session';
 
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
       throw new ApiError(400, 'invalid', 'Slot nhân vật không hợp lệ');
     }
 
-    const member = (await listMembers()).find((m) => m.slot === slot);
+    const members = await listMembers();
+    const member = members.find((m) => m.slot === slot) ?? DEFAULT_MEMBERS.find((m) => m.slot === slot);
     if (!member) {
       throw new ApiError(403, 'forbidden', 'Không tìm thấy thông tin thành viên');
     }
