@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
 import { ProjectRole } from '@/types/database';
 import { SlotId, isSlotId, SLOT_USER_IDS } from '@/lib/constants';
+import { ApiError } from '@/lib/api';
 
 export const SESSION_COOKIE = 'gth_session';
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -17,10 +18,15 @@ export interface SessionPayload {
 
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error('SESSION_SECRET is missing or shorter than 32 characters');
+  if (secret && secret.length >= 32) return secret;
+
+  // Deployments already need this private credential to load application data.
+  // Derive a separate signing key rather than using a public default secret.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (serviceKey && serviceKey.length >= 32) {
+    return createHmac('sha256', serviceKey).update('4crown-chat/session/v1').digest('hex');
   }
-  return secret;
+  throw new ApiError(500, 'unconfigured', 'session-secret');
 }
 
 function sign(body: string): string {
