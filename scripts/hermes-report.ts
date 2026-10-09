@@ -71,7 +71,10 @@ export async function syncReport() {
     const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}${path}`, { method: body ? 'POST' : 'GET',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(15_000), cache: 'no-store' });
-    if (!response.ok) throw new Error(`Google Sheets HTTP ${response.status}${response.status === 403 ? ': enable Sheets API and share the sheet with service-account email as Editor' : ''}`);
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({})) as { error?: { message?: string } };
+      throw new Error(`Google Sheets HTTP ${response.status}: ${detail.error?.message ?? 'request rejected'}`);
+    }
     return response.json() as Promise<T>;
   };
   const metadata = await api<{ sheets: { properties: Props }[] }>('?fields=sheets.properties');
