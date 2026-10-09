@@ -99,17 +99,20 @@ export async function DELETE(_req: NextRequest, { params }: RouteContext) {
     const existing = await requireVideo(id);
     await requireRecordManager(existing.uploaded_by);
 
-    const { error } = await db().from('gameplay_videos').delete().eq('id', id);
-    if (error) throw dbError(error);
-
+    // Keep the DB record until storage deletion succeeds, otherwise R2 sync
+    // can recreate the video that was just removed from the database.
     for (const key of [existing.file_key, existing.thumbnail_key]) {
       if (!key) continue;
       try {
         await deleteObject(key);
       } catch (r2Err) {
         console.error('[r2] delete failed for', key, r2Err);
+        throw new ApiError(502, 'system');
       }
     }
+
+    const { error } = await db().from('gameplay_videos').delete().eq('id', id).eq('project_id', PROJECT_ID);
+    if (error) throw dbError(error);
 
     if (existing.linked_task_id) {
       await logActivity({

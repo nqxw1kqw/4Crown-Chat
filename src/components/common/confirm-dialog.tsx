@@ -21,6 +21,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   isDangerous?: boolean;
+  busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -33,6 +34,7 @@ export default function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   isDangerous = true,
+  busy = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -42,7 +44,7 @@ export default function ConfirmDialog({
   const finalCancelLabel = cancelLabel || t('common.cancel');
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !busy && onCancel()}>
       <DialogContent className="max-w-md gap-0 p-0 sm:max-w-md">
         <DialogHeader className="gap-3 p-5 pb-0 text-left">
           <div className="flex items-start gap-3.5">
@@ -68,10 +70,11 @@ export default function ConfirmDialog({
         </DialogHeader>
 
         <DialogFooter className="mt-5 gap-2 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-4 sm:justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={busy}>
             {finalCancelLabel}
           </Button>
           <Button
+            disabled={busy}
             type="button"
             size="sm"
             variant={isDangerous ? 'destructive' : 'default'}

@@ -26,13 +26,14 @@ interface SignedVideoResponse {
 
 export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalProps) {
   const { t, formatBytes, formatDuration, formatDate } = useLocale();
-  const { deleteVideo, tasks, members, memberName, can } = useAppData();
+  const { deleteVideo, tasks, members, memberName, can, refresh } = useAppData();
   const { success, error: toastError } = useToast();
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loadingUrl, setLoadingUrl] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -61,6 +62,10 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
         setErrorMsg(null);
       } catch (err) {
         if (cancelled) return;
+        if (err instanceof ApiClientError && err.code === 'not_found') {
+          // Reload the gallery so a deleted record doesn't stay playable/deletable.
+          void refresh().catch(() => undefined);
+        }
         setVideoUrl(null);
         setErrorMsg(
           err instanceof ApiClientError ? t(`apiError.${err.code}` as TranslationKey) : t('apiError.system')
@@ -73,7 +78,7 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
     return () => {
       cancelled = true;
     };
-  }, [video.id, reloadToken, t]);
+  }, [video.id, reloadToken, t, refresh]);
 
   const handleCopyLink = async () => {
     try {
@@ -220,7 +225,10 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
         confirmLabel={t('videoPlayer.deleteConfirmBtn')}
         cancelLabel={t('common.cancel')}
         isDangerous={true}
+        busy={deleting}
         onConfirm={async () => {
+          if (deleting) return;
+          setDeleting(true);
           try {
             await deleteVideo(video.id);
             setShowDeleteConfirm(false);
@@ -233,6 +241,8 @@ export default function VideoPlayerModal({ video, onClose }: VideoPlayerModalPro
                 ? t(`apiError.${err.code}` as TranslationKey)
                 : t('apiError.system')
             );
+          } finally {
+            setDeleting(false);
           }
         }}
         onCancel={() => setShowDeleteConfirm(false)}

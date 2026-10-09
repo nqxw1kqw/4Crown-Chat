@@ -270,7 +270,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteVideo = useCallback(async (videoId: string) => {
-    await apiDelete(`/api/videos/${videoId}`);
+    try {
+      await apiDelete(`/api/videos/${videoId}`);
+    } catch (err) {
+      // Another tab/user may already have removed this record.
+      if (!isStaleError(err)) throw err;
+    }
     setVideos((prev) => prev.filter((v) => v.id !== videoId));
   }, []);
 
