@@ -9,7 +9,7 @@ export interface Report {
   summary: Record<string, number>;
   period: { from: string; to: string; minutes: number };
   hermes: Record<string, string | number | null>;
-  hot: { nick: string; event: string; seconds: number }[];
+  hot: { nick: string; event: string; seconds?: number; gain?: number }[];
   accounts: Account[];
 }
 export const NAMES = ['Hermes Report', 'Hermes History', 'Hermes Accounts'];
@@ -28,7 +28,8 @@ export function parseReport(value: unknown): Report {
   for (const k of ['authorized', 'onlineReadyFresh', 'intentionalStop', 'suspectedStalls', 'nativeBusy', 'smGain', 'petSMGain']) {
     if (!Number.isFinite(r.summary[k])) throw new Error('Invalid report summary');
   }
-  if (r.hot.some((h) => !h || typeof h.nick !== 'string' || typeof h.event !== 'string' || !Number.isFinite(h.seconds))) throw new Error('Invalid alerts');
+  if (r.hot.some((h) => !h || typeof h.nick !== 'string' || typeof h.event !== 'string' ||
+    (h.seconds !== undefined && !Number.isFinite(h.seconds)) || (h.gain !== undefined && !Number.isFinite(h.gain)))) throw new Error('Invalid alerts');
   const seen = new Set<string>();
   for (const a of r.accounts) {
     if (!a || typeof a.nick !== 'string' || !Number.isSafeInteger(a.sv) || typeof a.goal !== 'string' ||
@@ -70,7 +71,7 @@ export function buildRows(r: Report, previous: Cell[][] = []) {
     ['Kỳ đo nguồn (phút)', r.period.minutes, 'ΔSM nguồn', s.smGain, 'ΔSM đệ nguồn', s.petSMGain],
     ['So sánh', 'ΔSM / ΔTN / Δđệ so với lần lấy hợp lệ trước; trống = chưa đủ mẫu.'],
     ['Lưu ý', 'ΔTN là thay đổi số dư sau chi tiêu, không phải tổng TN kiếm được. Chỉ số 60s là cửa sổ của game, không cộng thành kỳ 15 phút.'],
-    ['Cảnh báo', r.hot.length ? r.hot.map((h) => `${h.nick}: ${h.event} (${Math.round(h.seconds / 60)} phút)`).join(' • ') : 'Không có cảnh báo nóng'],
+    ['Cảnh báo', r.hot.length ? r.hot.map((h) => `${h.nick}: ${h.event}${h.seconds !== undefined ? ` (${Math.round(h.seconds / 60)} phút)` : h.gain !== undefined ? ` (+${h.gain.toLocaleString('vi-VN')} SM)` : ''}`).join(' • ') : 'Không có cảnh báo nóng'],
     ['Chu kỳ', 'Lấy mỗi 15 phút; chỉ ghi snapshot mới. Không nội suy các mẫu bị bỏ lỡ.'],
     [], HEADERS, ...accounts,
   ];

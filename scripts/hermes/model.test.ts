@@ -47,3 +47,10 @@ test('GOOGLESHEET accepts service-account JSON and rejects API keys without expo
   assert.throws(() => credentials('AIza-not-a-service-account'), /API key/);
   assert.throws(() => credentials('{}'), /missing/);
 });
+test('source alerts support both stalled duration and top gain', () => {
+  const r = parseReport({ ...report, hot: [{ nick: 'test', event: 'top_sm_gain', gain: 500 }, { nick: 'other', event: 'stalled', seconds: 120 }] });
+  const text = buildRows(r).rows[9][1] as string;
+  assert.match(text, /500 SM/);
+  assert.match(text, /2 phút/);
+  assert.doesNotMatch(text, /NaN/);
+});
