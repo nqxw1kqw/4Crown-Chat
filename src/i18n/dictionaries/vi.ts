@@ -335,6 +335,10 @@ export const vi = {
   'profile.notInTeam': 'Chưa tham gia team',
   'profile.addToTeam': 'Thêm vào team',
   'profile.removeFromTeam': 'Xoá khỏi team',
+  'profile.colMember': 'Thành viên',
+  'profile.colName': 'Tên hiển thị',
+  'profile.colRole': 'Vai trò',
+  'profile.colAction': 'Thao tác',
 
   // Nhãn loại công việc
   'tag.code': 'Code',

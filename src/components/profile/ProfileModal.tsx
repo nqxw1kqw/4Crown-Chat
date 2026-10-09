@@ -5,6 +5,7 @@ import { X, LogOut, Save, Shield, Loader2, UserPlus, UserMinus } from 'lucide-re
 import { useLocale } from '@/i18n/useLocale';
 import type { TranslationKey } from '@/i18n/dictionaries/vi';
 import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 import { ApiClientError } from '@/lib/api-client';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { Button } from '@/components/ui/Button';
@@ -57,6 +58,9 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
   if (!session) return null;
 
   const role = myRole ?? session.role;
+  const gridCols = can.manageRoles
+    ? 'grid-cols-[4.75rem_minmax(5rem,1fr)_8rem_2rem]'
+    : 'grid-cols-[4.75rem_minmax(5rem,1fr)_8rem]';
   const currentMemberName =
     members.find((m) => m.slot === session.slot)?.display_name ?? session.slot.toUpperCase();
 
@@ -131,7 +135,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
       aria-labelledby="profile-modal-title"
     >
       <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-6 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-white px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
             <MemberAvatar slot={session.slot} name={currentMemberName} size="md" />
             <div>
@@ -153,7 +157,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
           </Button>
         </div>
 
-        <div className="space-y-4 overflow-y-auto p-6">
+        <div className="space-y-4 overflow-y-auto p-4 sm:p-6">
           <Card className="flex-row items-center justify-between gap-3 p-4 shadow-none">
             <div className="min-w-0">
               <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
@@ -176,85 +180,118 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
 
           <div className="space-y-2">
             <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-              {t('profile.rename')}
+              {t(can.manageRoles ? 'profile.teamTitle' : 'profile.rename')}
             </span>
-            <Card className="gap-3 p-4 shadow-none">
-              {(can.manageTeam ? SLOT_IDS : [session.slot]).map((slotId) => (
-                <div key={slotId} className="flex items-center gap-3">
-                  <MemberAvatar slot={slotId} name={names[slotId]} size="sm" />
-                  <span className="w-10 shrink-0 font-mono text-xs font-semibold text-[var(--color-text-muted)]">
-                    {slotId.toUpperCase()}
-                  </span>
-                  <FieldInput
-                    value={names[slotId]}
-                    onChange={(e) => setNames((prev) => ({ ...prev, [slotId]: e.target.value }))}
-                    maxLength={40}
-                    placeholder={slotId.toUpperCase()}
-                    aria-label={t('profile.slotLabel', { slot: slotId.toUpperCase() })}
-                    className="flex-1 text-xs"
-                  />
+            {can.manageRoles && (
+              <p className="text-[11px] text-[var(--color-text-muted)]">{t('profile.teamHint')}</p>
+            )}
+            <Card className="gap-0 overflow-hidden p-0 shadow-none">
+              <div className="overflow-x-auto">
+                <div className="min-w-[21.5rem]">
+                  <div
+                    className={cn(
+                      'grid items-center gap-x-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]',
+                      gridCols
+                    )}
+                  >
+                    <span>{t('profile.colMember')}</span>
+                    <span>{t('profile.colName')}</span>
+                    <span>{t('profile.colRole')}</span>
+                    {can.manageRoles && <span className="sr-only">{t('profile.colAction')}</span>}
+                  </div>
+
+                  {(can.manageTeam ? SLOT_IDS : [session.slot]).map((slotId) => {
+                    const isSelf = slotId === session.slot;
+                    const slotRole = roles[slotId];
+                    const inTeam = slotRole !== null;
+                    return (
+                      <div
+                        key={slotId}
+                        className={cn(
+                          'grid items-center gap-x-2 border-b border-[var(--color-border)] px-3 py-2 last:border-0',
+                          gridCols
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <MemberAvatar slot={slotId} name={names[slotId]} size="sm" />
+                          <span className="font-mono text-xs font-semibold text-[var(--color-text-muted)]">
+                            {slotId.toUpperCase()}
+                          </span>
+                        </div>
+
+                        {can.manageTeam ? (
+                          <FieldInput
+                            value={names[slotId]}
+                            onChange={(e) => setNames((prev) => ({ ...prev, [slotId]: e.target.value }))}
+                            maxLength={40}
+                            placeholder={slotId.toUpperCase()}
+                            aria-label={t('profile.slotLabel', { slot: slotId.toUpperCase() })}
+                            className="h-8 text-xs"
+                          />
+                        ) : (
+                          <span className="truncate text-xs font-medium text-[var(--color-text)]">
+                            {names[slotId]}
+                          </span>
+                        )}
+
+                        {can.manageRoles ? (
+                          <FieldSelect
+                            value={slotRole ?? ''}
+                            disabled={isSelf}
+                            aria-label={t('profile.roleLabel', { slot: slotId.toUpperCase() })}
+                            onChange={(event) =>
+                              setRoles((prev) => ({
+                                ...prev,
+                                [slotId]: (event.target.value || null) as ProjectRole | null,
+                              }))
+                            }
+                            className="h-8"
+                          >
+                            {!inTeam && !isSelf && <option value="">{t('profile.notInTeam')}</option>}
+                            {ROLE_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {t(`role.${option}` as TranslationKey)}
+                              </option>
+                            ))}
+                          </FieldSelect>
+                        ) : (
+                          <span className="truncate">
+                            {slotRole ? (
+                              <RoleBadge role={slotRole} className={ROLE_BADGE_COLORS[slotRole]} />
+                            ) : (
+                              <span className="text-xs text-[var(--color-text-muted)]">
+                                {t('profile.notInTeam')}
+                              </span>
+                            )}
+                          </span>
+                        )}
+
+                        {can.manageRoles &&
+                          (!isSelf ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRoles((prev) => ({ ...prev, [slotId]: inTeam ? null : 'MEMBER' }))
+                              }
+                              aria-label={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
+                              title={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
+                              className="size-8 cursor-pointer justify-self-end rounded-md p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)]"
+                            >
+                              {inTeam ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
+                            </button>
+                          ) : (
+                            <span className="size-8 justify-self-end" aria-hidden="true" />
+                          ))}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
             </Card>
           </div>
-
-          {can.manageRoles && (
-            <div className="space-y-2">
-              <span className="block text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-                {t('profile.teamTitle')}
-              </span>
-              <p className="text-[11px] text-[var(--color-text-muted)]">{t('profile.teamHint')}</p>
-              <Card className="gap-3 p-4 shadow-none">
-                {SLOT_IDS.map((slotId) => {
-                  const isSelf = slotId === session.slot;
-                  const inTeam = roles[slotId] !== null;
-                  return (
-                    <div key={slotId} className="flex flex-wrap items-center gap-3">
-                      <MemberAvatar slot={slotId} name={names[slotId]} size="sm" />
-                      <span className="w-10 shrink-0 font-mono text-xs font-semibold text-[var(--color-text-muted)]">
-                        {slotId.toUpperCase()}
-                      </span>
-                      <FieldSelect
-                        value={roles[slotId] ?? ''}
-                        disabled={isSelf}
-                        aria-label={t('profile.roleLabel', { slot: slotId.toUpperCase() })}
-                        onChange={(event) =>
-                          setRoles((prev) => ({
-                            ...prev,
-                            [slotId]: (event.target.value || null) as ProjectRole | null,
-                          }))
-                        }
-                        className="h-8 w-auto min-w-[7.5rem] flex-1 sm:flex-none"
-                      >
-                        {!inTeam && !isSelf && <option value="">{t('profile.notInTeam')}</option>}
-                        {ROLE_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {t(`role.${option}` as TranslationKey)}
-                          </option>
-                        ))}
-                      </FieldSelect>
-                      {!isSelf && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRoles((prev) => ({ ...prev, [slotId]: inTeam ? null : 'MEMBER' }))
-                          }
-                          aria-label={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
-                          title={inTeam ? t('profile.removeFromTeam') : t('profile.addToTeam')}
-                          className="cursor-pointer rounded-md p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text)]"
-                        >
-                          {inTeam ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </Card>
-            </div>
-          )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-4">
+        <div className="flex items-center justify-between border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-4 sm:px-6">
           <Button
             type="button"
             variant="ghost"

@@ -337,6 +337,10 @@ export const ja: Record<TranslationKey, string> = {
   'profile.notInTeam': 'チーム未所属',
   'profile.addToTeam': 'チームに追加',
   'profile.removeFromTeam': 'チームから外す',
+  'profile.colMember': 'メンバー',
+  'profile.colName': '表示名',
+  'profile.colRole': '役割',
+  'profile.colAction': '操作',
 
   // タスク種別ラベル
   'tag.code': 'コード',
