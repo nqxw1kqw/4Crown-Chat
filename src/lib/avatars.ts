@@ -7,9 +7,9 @@ import type { SlotId } from '@/lib/constants';
 // - m2: Thu Thao (Ảnh 3: Thỏ vàng đeo kính cam)
 // - m4: Taga (Ảnh 1: Bé mực Splatoon đội vòng hoa)
 export const CUSTOM_AVATARS: Partial<Record<SlotId, string>> = {
-  m1: '/avatars/m1.jpg',
-  m2: '/avatars/m2.png',
-  m4: '/avatars/m4.png',
+  m1: '/avatars/m1.jpg?v=2',
+  m2: '/avatars/m2.png?v=2',
+  m4: '/avatars/m4.png?v=2',
 };
 
 // Mỗi slot một phong cách nhân vật hoạt hình làm fallback dự phòng.
