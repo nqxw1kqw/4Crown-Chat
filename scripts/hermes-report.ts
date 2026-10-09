@@ -24,7 +24,7 @@ const update = (sheetId: number, rows: Cell[][]): BatchRequest => ({ updateCells
 function formatting(sheetId: number, report: boolean): BatchRequest[] {
   const header = report ? 12 : 0;
   const requests: BatchRequest[] = [
-    { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: header + 1, frozenColumnCount: report ? 2 : 1, hideGridlines: true } }, fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount,gridProperties.hideGridlines' } },
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: header + 1, frozenColumnCount: report ? 0 : 1, hideGridlines: true } }, fields: 'gridProperties.frozenRowCount,gridProperties.frozenColumnCount,gridProperties.hideGridlines' } },
     { repeatCell: { range: { sheetId }, cell: { userEnteredFormat: { textFormat: { fontFamily: 'Arial', fontSize: 10 }, verticalAlignment: 'MIDDLE', numberFormat: { type: 'NUMBER', pattern: '#,##0;[Red]-#,##0' } } }, fields: 'userEnteredFormat' } },
     { repeatCell: { range: { sheetId, startRowIndex: header, endRowIndex: header + 1 }, cell: { userEnteredFormat: { backgroundColor: rgb('17365D'), textFormat: { bold: true, foregroundColor: rgb('FFFFFF') }, wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat' } },
     { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 17 }, properties: { pixelSize: 145 }, fields: 'pixelSize' } },
