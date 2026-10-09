@@ -107,11 +107,21 @@ export async function listTasks(): Promise<Task[]> {
   const { data, error } = await db()
     .from('tasks')
     .select('*')
-    .eq('project_id', PROJECT_ID)
+    .in('project_id', [PROJECT_ID, '00000000-0000-0000-0000-000000000001'])
     .order('created_at', { ascending: false });
 
   if (error) throw dbError(error);
-  return attachChecklists((data ?? []) as Task[]);
+
+  const seen = new Set<string>();
+  const uniqueTasks: Task[] = [];
+  for (const t of (data ?? []) as Task[]) {
+    if (!seen.has(t.title)) {
+      seen.add(t.title);
+      uniqueTasks.push(t);
+    }
+  }
+
+  return attachChecklists(uniqueTasks);
 }
 
 export async function listVideos(): Promise<GameplayVideo[]> {

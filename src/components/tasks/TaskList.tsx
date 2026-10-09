@@ -11,6 +11,7 @@ import {
   Table2,
   Timer,
   X,
+  RotateCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -71,7 +72,7 @@ export default function TaskList({ selectedTaskId, initialView, openCreate = fal
   const { t } = useLocale();
   const { success, error } = useToast();
   const router = useRouter();
-  const { tasks, members, session, can, createTask, updateTask } = useAppData();
+  const { tasks, members, session, can, createTask, updateTask, refresh } = useAppData();
 
   const [view, setView] = useState<TaskView>(() => (typeof window === 'undefined' ? initialView ?? 'table' : readStoredView(initialView ?? 'table')));
   const [filterAssignee, setFilterAssignee] = useState('ALL');
@@ -80,6 +81,26 @@ export default function TaskList({ selectedTaskId, initialView, openCreate = fal
   const [sort, setSort] = useState<TaskSort>('deadline');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(openCreate);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Tự động kéo dữ liệu nếu danh sách đang rỗng
+  React.useEffect(() => {
+    if (session && tasks.length === 0) {
+      void refresh().catch(() => undefined);
+    }
+  }, [session, tasks.length, refresh]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+      success(t('tasks.statusUpdatedTitle'), 'Đã cập nhật danh sách công việc mới nhất.');
+    } catch {
+      error(t('tasks.statusUpdateFailed'), 'Không thể tải lại dữ liệu từ server.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -328,6 +349,19 @@ export default function TaskList({ selectedTaskId, initialView, openCreate = fal
           </ToolbarSelect>
         </div>
 
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="order-5 shrink-0"
+          title="Tải lại danh sách"
+        >
+          <RotateCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Làm mới</span>
+        </Button>
+
         {filtersActive && (
           <Button type="button" variant="ghost" size="xs" onClick={clearFilters} className="order-4 lg:order-none">
             <X className="size-3.5" />
@@ -343,12 +377,18 @@ export default function TaskList({ selectedTaskId, initialView, openCreate = fal
           title={t('tasks.emptyTitle')}
           description={t('tasks.emptyDescription')}
           action={
-            can.contribute ? (
-              <Button size="sm" onClick={() => setShowCreateModal(true)}>
-                <Plus className="size-4" />
-                {t('tasks.createTask')}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing}>
+                <RotateCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>Tải lại dữ liệu</span>
               </Button>
-            ) : undefined
+              {can.contribute && (
+                <Button size="sm" onClick={() => setShowCreateModal(true)}>
+                  <Plus className="size-4" />
+                  {t('tasks.createTask')}
+                </Button>
+              )}
+            </div>
           }
         />
       ) : visibleTasks.length === 0 ? (
