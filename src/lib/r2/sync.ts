@@ -30,10 +30,10 @@ async function syncObjects() {
     const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
     const record: Record<string, unknown> = {
       id, project_id: PROJECT_ID, file_key: key, size: object.Size ?? 0,
-      uploaded_by: null, linked_task_id: null,
+      uploaded_by: null,
       created_at: object.LastModified?.toISOString() ?? new Date().toISOString(),
       ...(isVideo ? { title: name.replace(/\.[^.]+$/, ''), version: '1.0', duration: 0, thumbnail_key: null }
-        : { name, folder: /\.(zip|rar|7z|apk|exe)$/i.test(name) ? 'builds' : /\.(wav|mp3|ogg|flac)$/i.test(name) ? 'audio' : /\.(png|jpe?g|webp|gif|psd|fbx|blend)$/i.test(name) ? 'assets' : 'general', mime: 'application/octet-stream' }),
+        : { linked_task_id: null, name, folder: /\.(zip|rar|7z|apk|exe)$/i.test(name) ? 'builds' : /\.(wav|mp3|ogg|flac)$/i.test(name) ? 'audio' : /\.(png|jpe?g|webp|gif|psd|fbx|blend)$/i.test(name) ? 'assets' : 'general', mime: 'application/octet-stream' }),
     };
     const { error } = await client.from(isVideo ? 'gameplay_videos' : 'files').upsert(record, { onConflict: 'id', ignoreDuplicates: true });
     if (error) throw error;

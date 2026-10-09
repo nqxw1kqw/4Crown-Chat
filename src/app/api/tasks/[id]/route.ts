@@ -66,13 +66,26 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     });
 
     if (changes.length > 0) {
-      const { data: updated, error } = await db()
+      let { data: updated, error } = await db()
         .from('tasks')
         .update(patch)
         .eq('id', id)
         .eq('project_id', existing.project_id)
         .select('*')
         .single();
+
+      if (error && (error.message.includes('tag') || (error as { code?: string }).code === 'PGRST204')) {
+        delete patch.tag;
+        const retry = await db()
+          .from('tasks')
+          .update(patch)
+          .eq('id', id)
+          .eq('project_id', existing.project_id)
+          .select('*')
+          .single();
+        updated = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw dbError(error);
 

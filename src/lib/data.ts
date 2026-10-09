@@ -283,20 +283,21 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetail> {
     client
       .from('gameplay_videos')
       .select('*')
-      .eq('linked_task_id', taskId)
       .order('created_at', { ascending: false }),
   ]);
 
-  for (const res of [commentsRes, activityRes, filesRes, videosRes]) {
-    if (res.error) throw dbError(res.error);
-  }
+  const comments = (!commentsRes.error && commentsRes.data ? commentsRes.data : []) as TaskComment[];
+  const activity = (!activityRes.error && activityRes.data ? activityRes.data : []) as TaskActivity[];
+  const files = (!filesRes.error && filesRes.data ? filesRes.data : []) as FileRecord[];
+  const allVideos = (!videosRes.error && videosRes.data ? videosRes.data : []) as GameplayVideo[];
+  const videos = allVideos.filter((v) => (v as { linked_task_id?: string | null }).linked_task_id === taskId);
 
   return {
     task: detailedTask,
-    comments: (commentsRes.data ?? []) as TaskComment[],
-    activity: (activityRes.data ?? []) as TaskActivity[],
-    files: (filesRes.data ?? []) as FileRecord[],
-    videos: (videosRes.data ?? []) as GameplayVideo[],
+    comments,
+    activity,
+    files,
+    videos,
   };
 }
 
