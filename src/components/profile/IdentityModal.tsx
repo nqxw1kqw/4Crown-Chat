@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, KeyRound, Loader2, ArrowRight } from 'lucide-react';
+import { Check, Loader2, ArrowRight } from 'lucide-react';
 import { useLocale } from '@/i18n/useLocale';
 import { DEFAULT_SLOT_NAMES, SLOT_IDS, type SlotId } from '@/lib/constants';
 import { useAppData } from '@/components/providers/AppDataProvider';
 import { ApiClientError } from '@/lib/api-client';
 import { Button } from '@/components/ui/Button';
-import { FieldInput } from '@/components/common/form';
 import MemberAvatar from '@/components/common/member-avatar';
 
 export default function IdentityModal() {
@@ -15,7 +14,6 @@ export default function IdentityModal() {
   const { login } = useAppData();
 
   const [selectedSlot, setSelectedSlot] = useState<SlotId>('m1');
-  const [passcode, setPasscode] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -26,14 +24,10 @@ export default function IdentityModal() {
     setSubmitting(true);
     setErrorMessage(null);
     try {
-      await login(selectedSlot, passcode);
+      await login(selectedSlot);
     } catch (err) {
       if (err instanceof ApiClientError && err.status === 429) {
         setErrorMessage(t('identity.errorRateLimited'));
-      } else if (err instanceof ApiClientError && err.status === 401) {
-        setErrorMessage(t('identity.errorInvalid'));
-      } else if (err instanceof ApiClientError && err.code === 'unconfigured') {
-        setErrorMessage(t('boot.errorUnconfigured'));
       } else {
         setErrorMessage(t('boot.errorGeneric'));
       }
@@ -132,22 +126,6 @@ export default function IdentityModal() {
             </div>
           </div>
 
-          <FieldInput
-            id="team-passcode"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={passcode}
-            onChange={(e) => setPasscode(e.target.value)}
-            label={t('identity.passcodeLabel')}
-            placeholder={t('identity.passcodePlaceholder')}
-            className="text-sm"
-          />
-          <p className="flex items-center gap-1.5 text-[11px] text-[var(--color-text-muted)]">
-            <KeyRound className="size-3.5" />
-            {t('identity.passcodeHint')}
-          </p>
-
           {errorMessage && (
             <p
               role="alert"
@@ -161,7 +139,7 @@ export default function IdentityModal() {
             type="submit"
             size="lg"
             className="w-full justify-center"
-            disabled={submitting || !passcode}
+            disabled={submitting || !selectedSlot}
           >
             {submitting ? (
               <Loader2 className="size-4 animate-spin" />

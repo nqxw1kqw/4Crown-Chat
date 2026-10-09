@@ -71,7 +71,7 @@ interface AppDataValue {
 
   memberName: (userId?: string | null) => string | null;
   retry: () => void;
-  login: (slot: SlotId, passcode: string) => Promise<void>;
+  login: (slot: SlotId, passcode?: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 
@@ -153,7 +153,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [applyBootstrap, bootToken]);
 
   const login = useCallback(
-    async (slot: SlotId, passcode: string) => {
+    async (slot: SlotId, passcode?: string) => {
       const next = await apiPost<SessionInfo>('/api/auth/login', { slot, passcode });
       const payload = await apiFetch<BootstrapPayload>('/api/bootstrap');
       setSession(next);
